@@ -749,9 +749,118 @@ export function PropertiesPanel() {
         )}
 
         <Section title="Filters" icon={MagicWand01Icon}>
-          <p className="px-1 text-[11px] text-muted-foreground">
-            Sharpen, noise, and grain filters are coming soon.
-          </p>
+          <Row label="Sharpen">
+            <SliderRow
+              min={0}
+              max={100}
+              suffix=""
+              value={layer.filters?.sharpen?.strength ?? 0}
+              onCommit={commit}
+              onChange={(v) =>
+                patch(layer.id, {
+                  filters: {
+                    ...(layer.filters ?? {}),
+                    sharpen: v > 0 ? { strength: v } : undefined,
+                  },
+                })
+              }
+            />
+          </Row>
+
+          <Row label="Noise">
+            <SliderRow
+              min={0}
+              max={100}
+              suffix=""
+              value={layer.filters?.noise?.amount ?? 0}
+              onCommit={commit}
+              onChange={(v) =>
+                patch(layer.id, {
+                  filters: {
+                    ...(layer.filters ?? {}),
+                    noise:
+                      v > 0
+                        ? {
+                            amount: v,
+                            mono: layer.filters?.noise?.mono ?? false,
+                          }
+                        : undefined,
+                  },
+                })
+              }
+            />
+          </Row>
+          {layer.filters?.noise && layer.filters.noise.amount > 0 && (
+            <Row label="Mono">
+              <Switch
+                checked={layer.filters.noise.mono}
+                onCheckedChange={(v) =>
+                  setProp(layer.id, {
+                    filters: {
+                      ...(layer.filters ?? {}),
+                      noise: { ...layer.filters!.noise!, mono: v },
+                    },
+                  })
+                }
+              />
+            </Row>
+          )}
+
+          <Row label="Grain">
+            <SliderRow
+              min={0}
+              max={100}
+              suffix=""
+              value={layer.filters?.grain?.amount ?? 0}
+              onCommit={commit}
+              onChange={(v) =>
+                patch(layer.id, {
+                  filters: {
+                    ...(layer.filters ?? {}),
+                    grain:
+                      v > 0
+                        ? {
+                            amount: v,
+                            scale: layer.filters?.grain?.scale ?? 1,
+                          }
+                        : undefined,
+                  },
+                })
+              }
+            />
+          </Row>
+          {layer.filters?.grain && layer.filters.grain.amount > 0 && (
+            <Row label="Scale">
+              <SliderRow
+                min={0.5}
+                max={4}
+                step={0.1}
+                suffix="×"
+                value={layer.filters.grain.scale ?? 1}
+                onCommit={commit}
+                onChange={(v) =>
+                  patch(layer.id, {
+                    filters: {
+                      ...(layer.filters ?? {}),
+                      grain: { ...layer.filters!.grain!, scale: v },
+                    },
+                  })
+                }
+              />
+            </Row>
+          )}
+
+          {(layer.filters?.sharpen ||
+            layer.filters?.noise ||
+            layer.filters?.grain) && (
+            <button
+              type="button"
+              onClick={() => setProp(layer.id, { filters: undefined })}
+              className="mt-1 self-start rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
+            >
+              Reset filters
+            </button>
+          )}
         </Section>
       </div>
     </div>
@@ -826,6 +935,44 @@ function NumField({
         </span>
       )}
     </label>
+  )
+}
+
+function SliderRow({
+  min,
+  max,
+  step = 1,
+  suffix,
+  value,
+  onChange,
+  onCommit,
+}: {
+  min: number
+  max: number
+  step?: number
+  suffix?: string
+  value: number
+  onChange: (v: number) => void
+  onCommit?: () => void
+}) {
+  const display = step < 1 ? value.toFixed(1) : Math.round(value)
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onPointerDown={onCommit}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="min-w-0 flex-1"
+      />
+      <span className="w-10 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
+        {display}
+        {suffix}
+      </span>
+    </div>
   )
 }
 

@@ -70,6 +70,7 @@ export function TopBar() {
     replaceDoc,
     recents,
     pushRecent,
+    setProp,
   } = useEditor()
   const [name, setName] = useState("Untitled")
   const [exporting, setExporting] = useState<ExportFormat | null>(null)
@@ -363,10 +364,102 @@ export function TopBar() {
         <DropdownMenu>
           <DropdownMenuTrigger render={<button className={triggerCls}>Filter</button>} />
           <DropdownMenuContent align="start" className="min-w-52">
-            <DropdownMenuLabel>Coming soon</DropdownMenuLabel>
-            <DropdownMenuItem disabled>Blur…</DropdownMenuItem>
-            <DropdownMenuItem disabled>Sharpen…</DropdownMenuItem>
-            <DropdownMenuItem disabled>Noise…</DropdownMenuItem>
+            <DropdownMenuLabel>Apply to selection</DropdownMenuLabel>
+            <DropdownMenuItem
+              disabled={noSel}
+              onClick={() =>
+                sel &&
+                setProp(sel.id, {
+                  effects: { ...(sel.effects ?? {}), blur: 8 },
+                })
+              }
+            >
+              Blur 8px
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={noSel}
+              onClick={() =>
+                sel &&
+                setProp(sel.id, {
+                  effects: { ...(sel.effects ?? {}), blur: 16 },
+                })
+              }
+            >
+              Blur 16px
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={noSel}
+              onClick={() =>
+                sel &&
+                setProp(sel.id, {
+                  filters: {
+                    ...(sel.filters ?? {}),
+                    sharpen: { strength: 35 },
+                  },
+                })
+              }
+            >
+              Sharpen
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={noSel}
+              onClick={() =>
+                sel &&
+                setProp(sel.id, {
+                  filters: {
+                    ...(sel.filters ?? {}),
+                    noise: { amount: 25, mono: false },
+                  },
+                })
+              }
+            >
+              Noise
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={noSel}
+              onClick={() =>
+                sel &&
+                setProp(sel.id, {
+                  filters: {
+                    ...(sel.filters ?? {}),
+                    noise: { amount: 30, mono: true },
+                  },
+                })
+              }
+            >
+              Mono noise
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={noSel}
+              onClick={() =>
+                sel &&
+                setProp(sel.id, {
+                  filters: {
+                    ...(sel.filters ?? {}),
+                    grain: { amount: 35, scale: 1 },
+                  },
+                })
+              }
+            >
+              Film grain
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={noSel}
+              onClick={() =>
+                sel &&
+                setProp(sel.id, {
+                  filters: undefined,
+                  effects: sel.effects
+                    ? { ...sel.effects, blur: null }
+                    : undefined,
+                })
+              }
+              variant="destructive"
+            >
+              Clear filters
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </nav>

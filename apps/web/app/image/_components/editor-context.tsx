@@ -360,11 +360,11 @@ const initial: Layer[] = [
 export function EditorProvider({ children }: { children: React.ReactNode }) {
   const [tool, setTool] = useState<ToolId>("move")
   const [doc, setDoc] = useState<DocState>({
-    layers: initial,
+    layers: [],
     past: [],
     future: [],
   })
-  const [selectedIds, setSelectedIds] = useState<string[]>(["photo"])
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [docSettings, setDocSettingsState] = useState<DocSettings>(
     DEFAULT_DOC_SETTINGS
   )
@@ -1177,7 +1177,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   )
 
   const resetDoc = useCallback(() => {
-    setDoc({ layers: initial, past: [], future: [] })
+    setDoc({ layers: [], past: [], future: [] })
     setDocSettingsState(DEFAULT_DOC_SETTINGS)
     setSelectedIds([])
     if (typeof window !== "undefined") {

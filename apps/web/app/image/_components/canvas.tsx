@@ -8,6 +8,7 @@ import { ImageIcon } from "@hugeicons/core-free-icons"
 import { useEditor } from "./editor-context"
 import { cn } from "@workspace/ui/lib/utils"
 import illustration from "../illustration.webp"
+import { WelcomeScreen } from "./welcome-screen"
 import type { Anchor, Layer } from "./types"
 import {
   computeSnap,
@@ -22,6 +23,7 @@ import {
   type SpacingGuides,
 } from "./geometry"
 import { ensureFont, fontStack } from "./fonts"
+import { hasSvgFilter, LayerSvgFilter, svgFilterId } from "./svg-filters"
 
 const DEFAULT_DOC_W = 1200
 const DEFAULT_DOC_H = 800
@@ -1472,18 +1474,25 @@ export function Canvas() {
       onDrop={handleDrop}
     >
       <CheckerBackground />
-      {viewToggles?.rulers && (
-        <Rulers
-          docW={DOC_W}
-          docH={DOC_H}
-          scale={scale}
-          panX={panX}
-          panY={panY}
-        />
+      {layers.length === 0 ? (
+        <WelcomeScreen />
+      ) : (
+        <>
+          {viewToggles?.rulers && (
+            <Rulers
+              docW={DOC_W}
+              docH={DOC_H}
+              scale={scale}
+              panX={panX}
+              panY={panY}
+            />
+          )}
+        </>
       )}
       <div
         ref={docRef}
         data-doc-surface="true"
+        hidden={layers.length === 0}
         className="relative shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_-8px_rgba(0,0,0,0.18),0_40px_80px_-32px_rgba(0,0,0,0.25)] ring-1 ring-border"
         style={{
           width: DOC_W,
@@ -1497,6 +1506,25 @@ export function Canvas() {
           transformOrigin: "center center",
         }}
       >
+        <svg
+          aria-hidden
+          width="0"
+          height="0"
+          className="pointer-events-none absolute"
+          style={{ width: 0, height: 0, overflow: "visible" }}
+        >
+          <defs>
+            {layers.map((l) =>
+              hasSvgFilter(l.filters) ? (
+                <LayerSvgFilter
+                  key={l.id}
+                  id={svgFilterId(l.id)}
+                  filters={l.filters!}
+                />
+              ) : null
+            )}
+          </defs>
+        </svg>
         {layers
           .slice()
           .reverse()
@@ -1532,6 +1560,8 @@ export function Canvas() {
               filterParts.push(
                 `drop-shadow(${fx.shadow.x}px ${fx.shadow.y}px ${fx.shadow.blur}px ${fx.shadow.color})`
               )
+            if (hasSvgFilter(l.filters))
+              filterParts.push(`url(#${svgFilterId(l.id)})`)
             const filter = filterParts.join(" ") || undefined
             // Inner shadow is approximated via inset box-shadow (works for
             // shapes; text/image fall back to filter-style emulation).
@@ -1915,7 +1945,9 @@ export function Canvas() {
       </div>
 
       {fileDragging && <DropOverlay />}
-      <RulerBadge zoom={zoom} cursor={cursor} docW={DOC_W} docH={DOC_H} />
+      {layers.length > 0 && (
+        <RulerBadge zoom={zoom} cursor={cursor} docW={DOC_W} docH={DOC_H} />
+      )}
     </div>
   )
 }
