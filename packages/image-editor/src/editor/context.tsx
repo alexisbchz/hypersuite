@@ -1078,13 +1078,6 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       const img = await loadImage(src)
       const w = img.naturalWidth
       const h = img.naturalHeight
-      // Doc is the image's natural dims plus a margin so the transparency
-      // checker is always visible around the image. Image at full natural
-      // resolution (pixel-perfect exports retain the actual pixels — the
-      // margin exports as transparent).
-      const margin = Math.max(40, Math.round(Math.max(w, h) * 0.04))
-      const docW = w + margin * 2
-      const docH = h + margin * 2
       const id = `img-${Date.now()}`
       const baseName = file.name.replace(/\.[^.]+$/, "") || "Image"
       const layer: Layer = {
@@ -1095,8 +1088,8 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
         locked: false,
         opacity: 100,
         blendMode: "normal",
-        x: margin,
-        y: margin,
+        x: 0,
+        y: 0,
         width: w,
         height: h,
         rotation: 0,
@@ -1108,8 +1101,8 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
         setDoc({ layers: [layer], past: [], future: [] })
         setDocSettingsState({
           ...DEFAULT_DOC_SETTINGS,
-          width: docW,
-          height: docH,
+          width: w,
+          height: h,
           background: "transparent",
         })
         setSelectedIds([id])
@@ -1124,7 +1117,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       newTab({
         name: baseName,
         layers: [layer],
-        docSettings: { width: docW, height: docH, background: "transparent" },
+        docSettings: { width: w, height: h, background: "transparent" },
       })
       // newTab resets selection — re-select the image so it's immediately
       // editable.
