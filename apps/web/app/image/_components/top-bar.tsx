@@ -2,6 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
+import illustration from "../illustration.webp"
 import { useCallback, useRef, useState } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
@@ -91,6 +92,7 @@ export function TopBar() {
           format,
           width: docSettings.width,
           height: docSettings.height,
+          photoUrl: illustration.src,
           resolveColor: makeColorResolver(),
         })
       } finally {
@@ -157,6 +159,7 @@ export function TopBar() {
         format: "png",
         width: docSettings.width,
         height: docSettings.height,
+        photoUrl: illustration.src,
         resolveColor: makeColorResolver(),
       })
       // Cast to satisfy TS lib lacking ClipboardItem in some envs.
@@ -217,9 +220,6 @@ export function TopBar() {
           <DropdownMenuContent align="start" className="min-w-52">
             <DropdownMenuItem onClick={() => setShowNewDoc(true)}>
               New…
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setShowDocument(true)}>
-              Document settings…
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => openInputRef.current?.click()}>
@@ -312,6 +312,15 @@ export function TopBar() {
                 {z}%
               </DropdownMenuItem>
             ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<button className={triggerCls}>Image</button>} />
+          <DropdownMenuContent align="start" className="min-w-52">
+            <DropdownMenuItem onClick={() => setShowDocument(true)}>
+              Document settings…
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 

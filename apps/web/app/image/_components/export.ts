@@ -27,6 +27,10 @@ type ExportContext = {
   height?: number
   /** resolves CSS variable / oklch references to a concrete CSS color string */
   resolveColor?: (raw: string) => string
+  /** Resolved URL for the legacy demo "photo" layer (which has no `src`).
+   *  Caller must pass this — Next.js static-import paths are hashed and
+   *  unavailable from a static literal. */
+  photoUrl?: string
 }
 
 export async function exportComposition(ctx: ExportContext) {
@@ -70,6 +74,7 @@ async function renderRaster({
   width,
   height,
   resolveColor,
+  photoUrl,
 }: ExportContext): Promise<Blob> {
   const docW = width ?? DEFAULT_DOC_W
   const docH = height ?? DEFAULT_DOC_H
@@ -132,12 +137,9 @@ async function renderRaster({
     if (l.kind === "image" && l.src) {
       const img = await loadImage(l.src)
       drawImageCover(ctx, img, 0, 0, l.width, l.height)
-    } else if (l.kind === "image" && l.id === "photo") {
+    } else if (l.kind === "image" && l.id === "photo" && photoUrl) {
       try {
-        // Load the original asset at full resolution — going through
-        // /_next/image downsamples to w=1200 and re-encodes at q=90,
-        // which destroys quality on exports larger than 1200px.
-        const img = await loadImage("/illustration.webp")
+        const img = await loadImage(photoUrl)
         drawImageCover(ctx, img, 0, 0, l.width, l.height)
       } catch {
         // fall through if not available — skip

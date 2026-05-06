@@ -1,6 +1,3 @@
-import audioIllustration from "./audio/illustration.webp"
-import imageIllustration from "./image/illustration.webp"
-import { LogoMenu } from "./logo-menu"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -9,9 +6,16 @@ import {
 } from "@workspace/ui/components/breadcrumb"
 import { buttonVariants } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
-import { GitHubIcon } from "./github-icon"
+
 import { JoinCommunityButton } from "@/components/join-community-button"
 import { ProductCard, type Product } from "@/components/product-card"
+
+import audioIllustration from "./audio/illustration.webp"
+import { GitHubIcon } from "./github-icon"
+import imageIllustration from "./image/illustration.webp"
+import { LogoMenu } from "./logo-menu"
+
+const GITHUB_URL = "https://github.com/alexisbchz/hypersuite"
 
 const products: Product[] = [
   {
@@ -50,7 +54,7 @@ export default function Page() {
         <div className="flex flex-wrap items-center gap-2">
           <JoinCommunityButton />
           <a
-            href="https://github.com/alexisbchz/hypersuite"
+            href={GITHUB_URL}
             className={cn(
               buttonVariants({ variant: "outline", size: "lg" }),
               "gap-1 self-start text-[15px] no-underline"
