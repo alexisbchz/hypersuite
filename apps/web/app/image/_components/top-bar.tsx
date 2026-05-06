@@ -29,13 +29,13 @@ export function TopBar() {
   const [name, setName] = useState("Untitled")
 
   return (
-    <header className="flex h-11 shrink-0 items-center gap-1 border-b border-border bg-background pe-2">
+    <header className="flex h-11 shrink-0 items-center border-b border-border bg-background pe-2">
       <Tooltip>
         <TooltipTrigger
           render={
             <Link
               href="/"
-              className="flex h-11 w-12 shrink-0 items-center justify-center hover:bg-muted"
+              className="flex h-11 w-12 shrink-0 items-center justify-center hover:bg-muted -mr-[1px]"
             >
               <Image
                 src="/logo.svg"
@@ -50,7 +50,7 @@ export function TopBar() {
         <TooltipContent>Back to home</TooltipContent>
       </Tooltip>
 
-      <Separator orientation="vertical" className="mx-1 h-11" />
+      <Separator orientation="vertical" className="h-11" />
 
       <nav className="flex items-center text-sm">
         {["File", "Edit", "View", "Object", "Filter"].map((m) => (
