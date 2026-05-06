@@ -1478,6 +1478,61 @@ export function Canvas() {
     return ""
   }, [pan, panMode, drag, tool])
 
+  // Memoise the doc-surface style so we don't allocate a fresh object on
+  // every cursor-coord update during pan. The canvas re-renders on every
+  // pointer move (cursor state lives on this component), so reducing the
+  // reconciliation cost here removes a class of subtle pan jitter.
+  const docSurfaceStyle = useMemo<React.CSSProperties>(() => {
+    const bg = docSettings?.background ?? "var(--color-background)"
+    const transparent =
+      !docSettings?.background || bg === "transparent" || bg === "none"
+    const checkerImage =
+      "linear-gradient(45deg, #cfcfcf 25%, transparent 25%, transparent 75%, #cfcfcf 75%, #cfcfcf), linear-gradient(45deg, #cfcfcf 25%, transparent 25%, transparent 75%, #cfcfcf 75%, #cfcfcf)"
+    const gridImage =
+      "linear-gradient(to right, color-mix(in oklch, var(--color-foreground), transparent 90%) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in oklch, var(--color-foreground), transparent 90%) 1px, transparent 1px)"
+    const grid = viewToggles?.grid
+    let backgroundImage: string | undefined
+    let backgroundSize: string | undefined
+    let backgroundRepeat: string | undefined
+    let backgroundPosition: string | undefined
+    if (transparent && grid) {
+      backgroundImage = `${gridImage}, ${checkerImage}`
+      backgroundSize = "20px 20px, 20px 20px, 20px 20px, 20px 20px"
+      backgroundPosition = "0 0, 0 0, 0 0, 10px 10px"
+      backgroundRepeat = "repeat"
+    } else if (transparent) {
+      backgroundImage = checkerImage
+      backgroundSize = "20px 20px, 20px 20px"
+      backgroundPosition = "0 0, 10px 10px"
+      backgroundRepeat = "repeat"
+    } else if (grid) {
+      backgroundImage = gridImage
+      backgroundSize = "20px 20px"
+      backgroundRepeat = "repeat"
+    }
+    return {
+      width: DOC_W,
+      height: DOC_H,
+      backgroundColor: transparent ? "#ffffff" : bg,
+      backgroundImage,
+      backgroundSize,
+      backgroundPosition,
+      backgroundRepeat,
+      transform: `translate3d(${panX}px, ${panY}px, 0) scale(${scale})`,
+      transformOrigin: "center center",
+      willChange: "transform",
+      backfaceVisibility: "hidden",
+    }
+  }, [
+    docSettings?.background,
+    viewToggles?.grid,
+    DOC_W,
+    DOC_H,
+    panX,
+    panY,
+    scale,
+  ])
+
   return (
     <div
       ref={containerRef}
@@ -1517,52 +1572,7 @@ export function Canvas() {
         data-doc-surface="true"
         hidden={layers.length === 0}
         className="relative shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_-8px_rgba(0,0,0,0.18),0_40px_80px_-32px_rgba(0,0,0,0.25)] ring-1 ring-border"
-        style={(() => {
-          const bg = docSettings?.background ?? "var(--color-background)"
-          const transparent =
-            !docSettings?.background ||
-            bg === "transparent" ||
-            bg === "none"
-          // Photoshop-style transparency checker rendered via two stacked
-          // 45° linear gradients (proven cross-browser pattern). Each
-          // gradient paints opposing corners of a 20×20 tile; the second
-          // is offset by 10px to interleave into a checkerboard.
-          const checkerImage =
-            "linear-gradient(45deg, #cfcfcf 25%, transparent 25%, transparent 75%, #cfcfcf 75%, #cfcfcf), linear-gradient(45deg, #cfcfcf 25%, transparent 25%, transparent 75%, #cfcfcf 75%, #cfcfcf)"
-          const gridImage =
-            "linear-gradient(to right, color-mix(in oklch, var(--color-foreground), transparent 90%) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in oklch, var(--color-foreground), transparent 90%) 1px, transparent 1px)"
-          const grid = viewToggles?.grid
-          let backgroundImage: string | undefined
-          let backgroundSize: string | undefined
-          let backgroundRepeat: string | undefined
-          let backgroundPosition: string | undefined
-          if (transparent && grid) {
-            backgroundImage = `${gridImage}, ${checkerImage}`
-            backgroundSize = "20px 20px, 20px 20px, 20px 20px, 20px 20px"
-            backgroundPosition = "0 0, 0 0, 0 0, 10px 10px"
-            backgroundRepeat = "repeat"
-          } else if (transparent) {
-            backgroundImage = checkerImage
-            backgroundSize = "20px 20px, 20px 20px"
-            backgroundPosition = "0 0, 10px 10px"
-            backgroundRepeat = "repeat"
-          } else if (grid) {
-            backgroundImage = gridImage
-            backgroundSize = "20px 20px"
-            backgroundRepeat = "repeat"
-          }
-          return {
-            width: DOC_W,
-            height: DOC_H,
-            backgroundColor: transparent ? "#ffffff" : bg,
-            backgroundImage,
-            backgroundSize,
-            backgroundPosition,
-            backgroundRepeat,
-            transform: `translate(${panX}px, ${panY}px) scale(${scale})`,
-            transformOrigin: "center center",
-          }
-        })()}
+        style={docSurfaceStyle}
       >
         <svg
           aria-hidden
