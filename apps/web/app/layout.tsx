@@ -3,13 +3,33 @@ import { Geist, Geist_Mono } from "next/font/google"
 
 import "@workspace/ui/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { cn } from "@workspace/ui/lib/utils";
+import { cn } from "@workspace/ui/lib/utils"
 
 export const metadata: Metadata = {
-  title: "Hypersuite",
+  title: {
+    default: "Hypersuite",
+    template: "%s - Hypersuite",
+  },
+  description: "An open source creative suite.",
+  applicationName: "Hypersuite",
+  authors: [{ name: "Alexis Bouchez" }],
+  creator: "Alexis Bouchez",
+  publisher: "Alexis Bouchez",
+  openGraph: {
+    title: "Hypersuite",
+    description: "An open source creative suite.",
+    siteName: "Hypersuite",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Hypersuite",
+    description: "An open source creative suite.",
+  },
 }
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'})
+const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],
@@ -25,7 +45,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", geist.variable)}
+      className={cn(
+        "antialiased",
+        fontMono.variable,
+        "font-sans",
+        geist.variable
+      )}
     >
       <body>
         <ThemeProvider>{children}</ThemeProvider>
