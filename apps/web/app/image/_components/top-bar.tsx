@@ -2,9 +2,10 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
+  ArrowDown01Icon,
   ArrowLeft01Icon,
   Download04Icon,
   MoreHorizontalIcon,
@@ -14,6 +15,15 @@ import {
 } from "@hugeicons/core-free-icons"
 
 import { Button } from "@workspace/ui/components/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu"
 import { Separator } from "@workspace/ui/components/separator"
 import {
   Tooltip,
@@ -21,12 +31,36 @@ import {
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
 import { useEditor } from "./editor-context"
+import {
+  EXPORT_FORMATS,
+  exportComposition,
+  makeColorResolver,
+  type ExportFormat,
+} from "./export"
 
 const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200, 400]
 
 export function TopBar() {
-  const { zoom, setZoom } = useEditor()
+  const { zoom, setZoom, layers } = useEditor()
   const [name, setName] = useState("Untitled")
+  const [exporting, setExporting] = useState<ExportFormat | null>(null)
+
+  const handleExport = useCallback(
+    async (format: ExportFormat) => {
+      setExporting(format)
+      try {
+        await exportComposition({
+          layers,
+          filename: name,
+          format,
+          resolveColor: makeColorResolver(),
+        })
+      } finally {
+        setExporting(null)
+      }
+    },
+    [layers, name]
+  )
 
   return (
     <header className="flex h-11 shrink-0 items-center border-b border-border bg-background pe-2">
@@ -115,10 +149,40 @@ export function TopBar() {
 
         <Separator orientation="vertical" className="mx-1 h-11" />
 
-        <Button size="sm" variant="outline">
-          <HugeiconsIcon icon={Download04Icon} />
-          Export
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={exporting !== null}
+                aria-label="Export"
+              >
+                <HugeiconsIcon icon={Download04Icon} />
+                {exporting ? `Exporting ${exporting.toUpperCase()}…` : "Export"}
+                <HugeiconsIcon
+                  icon={ArrowDown01Icon}
+                  className="-me-0.5 ms-0.5 size-3 text-muted-foreground"
+                  data-icon="inline-end"
+                />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="min-w-44">
+            <DropdownMenuLabel>Export as</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {EXPORT_FORMATS.map((f) => (
+              <DropdownMenuItem
+                key={f.id}
+                onClick={() => handleExport(f.id)}
+                disabled={exporting !== null}
+              >
+                {f.label}
+                <DropdownMenuShortcut>.{f.ext}</DropdownMenuShortcut>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button size="sm">Share</Button>
 
         <Tooltip>
