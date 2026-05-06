@@ -1484,7 +1484,7 @@ export function Canvas() {
       <div
         ref={docRef}
         data-doc-surface="true"
-        className="relative shadow-[0_30px_80px_-20px_rgba(0,0,0,0.35)] ring-1 ring-black/5"
+        className="relative shadow-[0_30px_80px_-20px_rgba(0,0,0,0.35)] ring-1 ring-border"
         style={{
           width: DOC_W,
           height: DOC_H,
@@ -3168,12 +3168,11 @@ function CheckerBackground() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0 opacity-50"
+      className="pointer-events-none absolute inset-0"
       style={{
         backgroundImage:
-          "linear-gradient(45deg, var(--color-muted) 25%, transparent 25%), linear-gradient(-45deg, var(--color-muted) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--color-muted) 75%), linear-gradient(-45deg, transparent 75%, var(--color-muted) 75%)",
-        backgroundSize: "20px 20px",
-        backgroundPosition: "0 0, 0 10px, 10px -10px, -10px 0",
+          "radial-gradient(circle, color-mix(in oklch, var(--color-foreground), transparent 88%) 1px, transparent 1px)",
+        backgroundSize: "16px 16px",
       }}
     />
   )
