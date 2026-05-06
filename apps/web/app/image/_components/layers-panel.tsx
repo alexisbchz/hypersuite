@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef, useState } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Add01Icon,
@@ -35,15 +36,78 @@ const KIND_ICON = {
 } as const
 
 export function LayersPanel() {
-  const { layers, selectedId, select, toggleVisible, toggleLocked, add, remove, reorder } =
-    useEditor()
+  const {
+    layers,
+    selectedId,
+    select,
+    toggleVisible,
+    toggleLocked,
+    rename,
+    add,
+    remove,
+    reorder,
+    moveTo,
+  } = useEditor()
+
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dropAt, setDropAt] = useState<{
+    targetId: string
+    position: "before" | "after"
+  } | null>(null)
+
+  const onRowDragStart = (id: string) => (e: React.DragEvent) => {
+    setDragId(id)
+    e.dataTransfer.effectAllowed = "move"
+    e.dataTransfer.setData("text/plain", id)
+  }
+
+  const onRowDragOver = (id: string) => (e: React.DragEvent) => {
+    if (!dragId || dragId === id) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "move"
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const position: "before" | "after" =
+      e.clientY < rect.top + rect.height / 2 ? "before" : "after"
+    if (
+      !dropAt ||
+      dropAt.targetId !== id ||
+      dropAt.position !== position
+    ) {
+      setDropAt({ targetId: id, position })
+    }
+  }
+
+  const onRowDrop = (id: string) => (e: React.DragEvent) => {
+    e.preventDefault()
+    if (!dragId || !dropAt) {
+      setDragId(null)
+      setDropAt(null)
+      return
+    }
+    const targetIdx = layers.findIndex((l) => l.id === dropAt.targetId)
+    if (targetIdx < 0) {
+      setDragId(null)
+      setDropAt(null)
+      return
+    }
+    const insertIdx =
+      dropAt.position === "before" ? targetIdx : targetIdx + 1
+    moveTo(dragId, insertIdx)
+    setDragId(null)
+    setDropAt(null)
+  }
+
+  const onDragEnd = () => {
+    setDragId(null)
+    setDropAt(null)
+  }
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
           <HugeiconsIcon icon={Layers01Icon} className="size-3.5" />
-          Calques
+          Layers
           <span className="ms-1 text-muted-foreground">{layers.length}</span>
         </div>
         <div className="flex items-center gap-0.5">
@@ -79,12 +143,23 @@ export function LayersPanel() {
               selected={l.id === selectedId}
               first={i === 0}
               last={i === layers.length - 1}
+              isDragging={dragId === l.id}
+              dropIndicator={
+                dropAt && dropAt.targetId === l.id && dragId !== l.id
+                  ? dropAt.position
+                  : null
+              }
+              onDragStart={onRowDragStart(l.id)}
+              onDragOver={onRowDragOver(l.id)}
+              onDrop={onRowDrop(l.id)}
+              onDragEnd={onDragEnd}
               onSelect={() => select(l.id)}
               onToggleVisible={() => toggleVisible(l.id)}
               onToggleLock={() => toggleLocked(l.id)}
               onUp={() => reorder(l.id, "up")}
               onDown={() => reorder(l.id, "down")}
               onDelete={() => remove(l.id)}
+              onRename={(name) => rename(l.id, name)}
             />
           ))}
         </ul>
@@ -98,33 +173,100 @@ function LayerRow({
   selected,
   first,
   last,
+  isDragging,
+  dropIndicator,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
   onSelect,
   onToggleVisible,
   onToggleLock,
   onUp,
   onDown,
   onDelete,
+  onRename,
 }: {
   layer: Layer
   selected: boolean
   first: boolean
   last: boolean
+  isDragging: boolean
+  dropIndicator: "before" | "after" | null
+  onDragStart: (e: React.DragEvent) => void
+  onDragOver: (e: React.DragEvent) => void
+  onDrop: (e: React.DragEvent) => void
+  onDragEnd: () => void
   onSelect: () => void
   onToggleVisible: () => void
   onToggleLock: () => void
   onUp: () => void
   onDown: () => void
   onDelete: () => void
+  onRename: (name: string) => void
 }) {
   const Icon = KIND_ICON[layer.kind]
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(layer.name)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (editing) {
+      setDraft(layer.name)
+      requestAnimationFrame(() => {
+        inputRef.current?.focus()
+        inputRef.current?.select()
+      })
+    }
+  }, [editing, layer.name])
+
+  const commit = () => {
+    const next = draft.trim()
+    if (next && next !== layer.name) onRename(next)
+    setEditing(false)
+  }
+
+  const cancel = () => {
+    setDraft(layer.name)
+    setEditing(false)
+  }
+
   return (
-    <li>
+    <li
+      className="relative"
+      draggable={!editing}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+    >
+      {dropIndicator && (
+        <span
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-x-1.5 z-10 h-0.5 rounded-full bg-primary",
+            dropIndicator === "before" ? "-top-px" : "-bottom-px"
+          )}
+        />
+      )}
       <div
         role="button"
         tabIndex={0}
-        onClick={onSelect}
+        onClick={() => {
+          if (!editing) onSelect()
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation()
+          setEditing(true)
+        }}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
+          if (editing) return
+          if (e.key === "Enter") {
+            e.preventDefault()
+            setEditing(true)
+            return
+          }
+          if (e.key === " ") {
             e.preventDefault()
             onSelect()
           }
@@ -132,13 +274,44 @@ function LayerRow({
         aria-pressed={selected}
         className={cn(
           "group/layer flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          selected ? "bg-primary/10 text-foreground" : "hover:bg-muted"
+          selected ? "bg-primary/10 text-foreground" : "hover:bg-muted",
+          isDragging && "opacity-40"
         )}
       >
         <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground group-hover/layer:bg-background">
           <HugeiconsIcon icon={Icon} className="size-3.5" />
         </span>
-        <span className="min-w-0 flex-1 truncate">{layer.name}</span>
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+              if (e.key === "Enter") {
+                e.preventDefault()
+                commit()
+              } else if (e.key === "Escape") {
+                e.preventDefault()
+                cancel()
+              }
+            }}
+            className="min-w-0 flex-1 rounded-sm bg-background px-1 py-0.5 text-xs text-foreground outline-none ring-1 ring-ring"
+          />
+        ) : (
+          <span
+            className="min-w-0 flex-1 cursor-text truncate"
+            onDoubleClick={(e) => {
+              e.stopPropagation()
+              setEditing(true)
+            }}
+            title="Double-click to rename"
+          >
+            {layer.name}
+          </span>
+        )}
 
         <span className="flex items-center gap-0.5 text-muted-foreground opacity-0 transition-opacity group-hover/layer:opacity-100 has-[[data-active=true]]:opacity-100">
           <Tooltip>

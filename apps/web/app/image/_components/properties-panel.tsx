@@ -33,7 +33,7 @@ const BLEND_MODES = [
 ] as const
 
 export function PropertiesPanel() {
-  const { layers, selectedId, patch } = useEditor()
+  const { layers, selectedId, patch, rename } = useEditor()
   const layer = layers.find((l) => l.id === selectedId) ?? null
 
   if (!layer) {
@@ -54,8 +54,24 @@ export function PropertiesPanel() {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-3 py-2">
-        <p className="truncate text-xs font-medium text-foreground">{layer.name}</p>
-        <p className="text-[11px] text-muted-foreground capitalize">
+        <Input
+          key={layer.id}
+          defaultValue={layer.name}
+          onBlur={(e) => {
+            const v = e.currentTarget.value.trim()
+            if (v && v !== layer.name) rename(layer.id, v)
+            else e.currentTarget.value = layer.name
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur()
+            else if (e.key === "Escape") {
+              e.currentTarget.value = layer.name
+              e.currentTarget.blur()
+            }
+          }}
+          className="h-7 w-full border-transparent bg-transparent px-1 text-xs font-medium text-foreground hover:border-border focus-visible:ring-0"
+        />
+        <p className="px-1 text-[11px] text-muted-foreground capitalize">
           {layer.kind} layer
         </p>
       </div>

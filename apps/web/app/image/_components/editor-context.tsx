@@ -20,6 +20,7 @@ type EditorState = {
   rename: (id: string, name: string) => void
   patch: (id: string, p: Partial<Layer>) => void
   reorder: (id: string, dir: "up" | "down") => void
+  moveTo: (id: string, targetIndex: number) => void
   add: () => void
   addImage: (
     file: File,
@@ -138,6 +139,21 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const moveTo = useCallback((id: string, targetIndex: number) => {
+    setLayers((prev) => {
+      const idx = prev.findIndex((l) => l.id === id)
+      if (idx < 0) return prev
+      const clamped = Math.max(0, Math.min(prev.length, targetIndex))
+      let insertAt = clamped
+      if (idx < clamped) insertAt -= 1
+      if (insertAt === idx) return prev
+      const next = prev.slice()
+      const [item] = next.splice(idx, 1)
+      next.splice(insertAt, 0, item!)
+      return next
+    })
+  }, [])
+
   const add = useCallback(() => {
     setLayers((prev) => {
       const id = `layer-${Date.now()}`
@@ -220,13 +236,14 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       rename,
       patch,
       reorder,
+      moveTo,
       add,
       addImage,
       remove,
       zoom,
       setZoom,
     }),
-    [tool, layers, selectedId, select, toggleVisible, toggleLocked, rename, patch, reorder, add, addImage, remove, zoom]
+    [tool, layers, selectedId, select, toggleVisible, toggleLocked, rename, patch, reorder, moveTo, add, addImage, remove, zoom]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

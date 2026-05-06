@@ -86,7 +86,7 @@ export function TopBar() {
 
       <Separator orientation="vertical" className="h-11" />
 
-      <nav className="flex items-center text-sm">
+      <nav className="ml-1 flex items-center text-sm">
         {["File", "Edit", "View", "Object", "Filter"].map((m) => (
           <button
             key={m}

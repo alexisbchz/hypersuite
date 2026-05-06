@@ -1,23 +1,36 @@
 "use client"
 
 import Image from "next/image"
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { ImageIcon } from "@hugeicons/core-free-icons"
 
 import { useEditor } from "./editor-context"
 import { cn } from "@workspace/ui/lib/utils"
 import illustration from "../illustration.webp"
+import type { Layer } from "./types"
 
 const DOC_W = 1200
 const DOC_H = 800
 
+type DragState = {
+  id: string
+  pointerId: number
+  startClientX: number
+  startClientY: number
+  startX: number
+  startY: number
+  shifted: boolean
+  moved: boolean
+}
+
 export function Canvas() {
-  const { layers, selectedId, select, zoom, addImage } = useEditor()
+  const { layers, selectedId, select, zoom, addImage, patch, tool } = useEditor()
   const scale = zoom / 100
   const docRef = useRef<HTMLDivElement | null>(null)
   const [dragging, setDragging] = useState(false)
   const dragDepth = useRef(0)
+  const [drag, setDrag] = useState<DragState | null>(null)
 
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
@@ -69,9 +82,78 @@ export function Canvas() {
     if (dragDepth.current === 0) setDragging(false)
   }, [])
 
+  // Window-level listeners while a layer drag is active
+  useEffect(() => {
+    if (!drag) return
+
+    const layer = layers.find((l) => l.id === drag.id)
+    if (!layer) {
+      setDrag(null)
+      return
+    }
+
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerId !== drag.pointerId) return
+      let dx = (e.clientX - drag.startClientX) / scale
+      let dy = (e.clientY - drag.startClientY) / scale
+      if (e.shiftKey) {
+        if (Math.abs(dx) > Math.abs(dy)) dy = 0
+        else dx = 0
+      }
+      const moved = drag.moved || Math.hypot(dx, dy) > 1
+      if (moved && !drag.moved) {
+        setDrag({ ...drag, moved: true })
+      }
+      patch(drag.id, {
+        x: Math.round(drag.startX + dx),
+        y: Math.round(drag.startY + dy),
+      })
+    }
+
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerId !== drag.pointerId) return
+      setDrag(null)
+    }
+
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+    window.addEventListener("pointercancel", onUp)
+    return () => {
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+      window.removeEventListener("pointercancel", onUp)
+    }
+  }, [drag, layers, patch, scale])
+
+  const startLayerDrag = useCallback(
+    (e: React.PointerEvent, layer: Layer) => {
+      if (layer.locked) return
+      if (tool !== "move") return
+      // Only primary button
+      if (e.button !== 0) return
+      e.stopPropagation()
+      e.preventDefault()
+      select(layer.id)
+      setDrag({
+        id: layer.id,
+        pointerId: e.pointerId,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startX: layer.x,
+        startY: layer.y,
+        shifted: e.shiftKey,
+        moved: false,
+      })
+    },
+    [select, tool]
+  )
+
   return (
     <div
-      className="relative flex flex-1 items-center justify-center overflow-hidden bg-[color-mix(in_oklch,var(--color-muted),var(--color-background)_30%)]"
+      className={cn(
+        "relative flex flex-1 items-center justify-center overflow-hidden bg-[color-mix(in_oklch,var(--color-muted),var(--color-background)_30%)]",
+        drag && "cursor-grabbing select-none"
+      )}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -96,10 +178,16 @@ export function Canvas() {
           .map((l) => {
             if (!l.visible) return null
             const selected = l.id === selectedId
+            const draggable = !l.locked && tool === "move"
             const common = {
               className: cn(
-                "absolute select-none cursor-default outline-none",
-                selected && "ring-2 ring-primary ring-offset-0"
+                "absolute select-none outline-none",
+                selected && "ring-2 ring-primary ring-offset-0",
+                draggable
+                  ? drag?.id === l.id
+                    ? "cursor-grabbing"
+                    : "cursor-grab"
+                  : "cursor-default"
               ),
               style: {
                 left: l.x * scale,
@@ -109,7 +197,9 @@ export function Canvas() {
                 opacity: l.opacity / 100,
                 mixBlendMode: l.blendMode as React.CSSProperties["mixBlendMode"],
                 transform: `rotate(${l.rotation}deg)`,
+                touchAction: "none",
               } as React.CSSProperties,
+              onPointerDown: (e: React.PointerEvent) => startLayerDrag(e, l),
               onMouseDown: (e: React.MouseEvent) => {
                 e.stopPropagation()
                 if (!l.locked) select(l.id)
@@ -124,7 +214,7 @@ export function Canvas() {
                     src={l.src}
                     alt={l.name}
                     draggable={false}
-                    className="size-full rounded-md object-cover"
+                    className="pointer-events-none size-full rounded-md object-cover"
                   />
                 </div>
               )
@@ -138,7 +228,8 @@ export function Canvas() {
                     alt=""
                     fill
                     sizes="(max-width: 1200px) 100vw, 1200px"
-                    className="rounded-md object-cover"
+                    draggable={false}
+                    className="pointer-events-none rounded-md object-cover"
                   />
                 </div>
               )
