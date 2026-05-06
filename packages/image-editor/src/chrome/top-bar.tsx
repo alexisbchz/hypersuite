@@ -235,14 +235,14 @@ export function TopBar() {
           render={
             <Link
               href="/"
-              className="-mr-[1px] flex h-11 w-12 shrink-0 items-center justify-center hover:bg-muted"
+              className="-mr-px flex h-11 w-12 shrink-0 items-center justify-center hover:bg-muted"
             >
               <Image
                 src="/logo.svg"
                 alt="Hypersuite"
                 width={20}
                 height={20}
-                className="size-5 rounded-full"
+                className="size-5 rounded-full mt-0.5 ml-0.5"
               />
             </Link>
           }
