@@ -1,11 +1,9 @@
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@workspace/ui/components/breadcrumb"
+import { Canvas } from "./_components/canvas"
+import { EditorProvider } from "./_components/editor-context"
+import { RightPanel } from "./_components/right-panel"
+import { StatusBar } from "./_components/status-bar"
+import { ToolPalette } from "./_components/tool-palette"
+import { TopBar } from "./_components/top-bar"
 
 export const metadata = {
   title: "Image",
@@ -13,26 +11,16 @@ export const metadata = {
 
 export default function Page() {
   return (
-    <div className="flex min-h-svh p-8">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink render={<a href="/">~</a>} />
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>image</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        <div>
-          <h1 className="text-lg font-semibold">Image</h1>
-          <p className="text-lg text-muted-foreground">
-            Edit images right in your browser.
-          </p>
+    <EditorProvider>
+      <div className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground">
+        <TopBar />
+        <div className="flex flex-1 overflow-hidden">
+          <ToolPalette />
+          <Canvas />
+          <RightPanel />
         </div>
+        <StatusBar />
       </div>
-    </div>
+    </EditorProvider>
   )
 }
