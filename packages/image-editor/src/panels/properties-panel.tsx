@@ -25,9 +25,9 @@ import {
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
-import { ColorPicker } from "./color-picker"
-import { FontPicker } from "./font-picker"
-import { useEditor } from "./editor-context"
+import { ColorPicker } from "../pickers/color-picker"
+import { FontPicker } from "../pickers/font-picker"
+import { useEditor } from "../editor"
 
 const BLEND_MODES = [
   "normal",

@@ -1,0 +1,11 @@
+{
+  "extends": "@workspace/typescript-config/nextjs.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@workspace/image-editor/*": ["./src/*"]
+    }
+  },
+  "include": ["src", "src/**/*.webp"],
+  "exclude": ["node_modules", "dist"]
+}

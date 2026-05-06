@@ -10,23 +10,27 @@ import {
 
 import { Button } from "@workspace/ui/components/button"
 
-import { useEditor } from "./editor-context"
-import { loadHyperimg } from "./hyperimg"
-import { NewDocumentDialog } from "./new-document-dialog"
+import { useEditor } from "./editor"
+import { loadHyperimg } from "./lib/hyperimg"
+import { NewDocumentDialog } from "./dialogs/new-document-dialog"
 
 export function WelcomeScreen() {
-  const { addImage, replaceDoc, recents } = useEditor()
+  const { newTab, openImageInNewTab, recents } = useEditor()
   const [showNew, setShowNew] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const handlePickFile = async (file: File) => {
     if (file.name.toLowerCase().endsWith(".hyperimg")) {
       const snap = await loadHyperimg(file)
-      replaceDoc(snap.layers, snap.doc)
+      newTab({
+        name: file.name.replace(/\.hyperimg$/i, ""),
+        layers: snap.layers,
+        docSettings: snap.doc,
+      })
       return
     }
     if (file.type.startsWith("image/")) {
-      await addImage(file)
+      await openImageInNewTab(file)
     }
   }
 

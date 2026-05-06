@@ -36,8 +36,8 @@ import {
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
-import { useEditor } from "./editor-context"
-import type { Layer, LayerKind } from "./types"
+import { useEditor } from "../editor"
+import type { Layer, LayerKind } from "../lib/types"
 
 const KIND_ICON: Record<LayerKind, typeof ImageIcon> = {
   image: ImageIcon,

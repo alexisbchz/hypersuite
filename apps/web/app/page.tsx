@@ -12,7 +12,7 @@ import { ProductCard, type Product } from "@/components/product-card"
 
 import audioIllustration from "./audio/illustration.webp"
 import { GitHubIcon } from "./github-icon"
-import imageIllustration from "./image/illustration.webp"
+import imageIllustration from "@workspace/image-editor/assets/illustration.webp"
 import { LogoMenu } from "./logo-menu"
 
 const GITHUB_URL = "https://github.com/alexisbchz/hypersuite"

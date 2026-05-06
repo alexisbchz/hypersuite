@@ -2,8 +2,8 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import illustration from "../illustration.webp"
-import { useCallback, useRef, useState } from "react"
+import illustration from "../assets/illustration.webp"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   ArrowDown01Icon,
@@ -33,19 +33,20 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
-import { useEditor } from "./editor-context"
+import { useEditor } from "../editor"
 import {
   EXPORT_FORMATS,
   exportComposition,
   makeColorResolver,
   exportToBlob,
   type ExportFormat,
-} from "./export"
-import { SettingsDialog } from "./settings-dialog"
-import { DocumentDialog } from "./document-dialog"
-import { NewDocumentDialog } from "./new-document-dialog"
-import { ShortcutsDialog } from "./shortcuts-dialog"
-import { downloadBlob, loadHyperimg, saveHyperimg } from "./hyperimg"
+} from "../lib/export"
+import { SettingsDialog } from "../dialogs/settings-dialog"
+import { DocumentDialog } from "../dialogs/document-dialog"
+import { NewDocumentDialog } from "../dialogs/new-document-dialog"
+import { ShortcutsDialog } from "../dialogs/shortcuts-dialog"
+import { downloadBlob, loadHyperimg, saveHyperimg } from "../lib/hyperimg"
+import { CMD_EVENTS } from "../chrome/command-palette"
 
 const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200, 400]
 
@@ -68,12 +69,14 @@ export function TopBar() {
     toggleLocked,
     resetDoc,
     docSettings,
-    replaceDoc,
+    newTab,
+    filename: name,
+    setFilename: setName,
     recents,
     pushRecent,
     setProp,
+    getRasterCanvas,
   } = useEditor()
-  const [name, setName] = useState("Untitled")
   const [exporting, setExporting] = useState<ExportFormat | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showDocument, setShowDocument] = useState(false)
@@ -94,12 +97,13 @@ export function TopBar() {
           height: docSettings.height,
           photoUrl: illustration.src,
           resolveColor: makeColorResolver(),
+          getRasterCanvas,
         })
       } finally {
         setExporting(null)
       }
     },
-    [layers, name, docSettings.width, docSettings.height]
+    [layers, name, docSettings.width, docSettings.height, getRasterCanvas]
   )
 
   const handleCopyLink = useCallback(async () => {
@@ -133,14 +137,13 @@ export function TopBar() {
     async (file: File) => {
       try {
         const snap = await loadHyperimg(file)
-        replaceDoc(snap.layers, snap.doc)
-        const filename = file.name
+        const tabName = file.name.replace(/\.hyperimg$/i, "")
+        newTab({ name: tabName, layers: snap.layers, docSettings: snap.doc })
         pushRecent({
-          name: filename,
+          name: file.name,
           thumbnail: "",
           savedAt: Date.now(),
         })
-        setName(filename.replace(/\.hyperimg$/, ""))
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error("open .hyperimg failed", e)
@@ -148,7 +151,7 @@ export function TopBar() {
         setTimeout(() => setShareStatus(null), 1500)
       }
     },
-    [replaceDoc, pushRecent]
+    [newTab, pushRecent]
   )
 
   const handleCopyImage = useCallback(async () => {
@@ -161,6 +164,7 @@ export function TopBar() {
         height: docSettings.height,
         photoUrl: illustration.src,
         resolveColor: makeColorResolver(),
+        getRasterCanvas,
       })
       // Cast to satisfy TS lib lacking ClipboardItem in some envs.
       const Item = (
@@ -179,13 +183,47 @@ export function TopBar() {
       setShareStatus("Copy failed")
     }
     setTimeout(() => setShareStatus(null), 1500)
-  }, [layers, name, docSettings.width, docSettings.height])
+  }, [layers, name, docSettings.width, docSettings.height, getRasterCanvas])
 
   const sel = layers.find((l) => l.id === selectedId) ?? null
   const selIdx = sel ? layers.findIndex((l) => l.id === sel.id) : -1
   const noSel = !sel
   const isFirst = selIdx === 0
   const isLast = selIdx === layers.length - 1
+
+  // Bridge between the global command palette and dialog/file-input state
+  // that lives only in this component.
+  useEffect(() => {
+    const onNew = () => setShowNewDoc(true)
+    const onOpen = () => openInputRef.current?.click()
+    const onSave = () => void handleSaveHyperimg()
+    const onPng = () => void handleExport("png")
+    const onJpeg = () => void handleExport("jpeg")
+    const onWebp = () => void handleExport("webp")
+    const onSvg = () => void handleExport("svg")
+    const onDocSettings = () => setShowDocument(true)
+    const onShortcuts = () => setShowShortcuts(true)
+    window.addEventListener(CMD_EVENTS.newDocument, onNew)
+    window.addEventListener(CMD_EVENTS.openFile, onOpen)
+    window.addEventListener(CMD_EVENTS.save, onSave)
+    window.addEventListener(CMD_EVENTS.exportPng, onPng)
+    window.addEventListener(CMD_EVENTS.exportJpeg, onJpeg)
+    window.addEventListener(CMD_EVENTS.exportWebp, onWebp)
+    window.addEventListener(CMD_EVENTS.exportSvg, onSvg)
+    window.addEventListener(CMD_EVENTS.documentSettings, onDocSettings)
+    window.addEventListener(CMD_EVENTS.shortcuts, onShortcuts)
+    return () => {
+      window.removeEventListener(CMD_EVENTS.newDocument, onNew)
+      window.removeEventListener(CMD_EVENTS.openFile, onOpen)
+      window.removeEventListener(CMD_EVENTS.save, onSave)
+      window.removeEventListener(CMD_EVENTS.exportPng, onPng)
+      window.removeEventListener(CMD_EVENTS.exportJpeg, onJpeg)
+      window.removeEventListener(CMD_EVENTS.exportWebp, onWebp)
+      window.removeEventListener(CMD_EVENTS.exportSvg, onSvg)
+      window.removeEventListener(CMD_EVENTS.documentSettings, onDocSettings)
+      window.removeEventListener(CMD_EVENTS.shortcuts, onShortcuts)
+    }
+  }, [handleSaveHyperimg, handleExport])
 
   const triggerCls =
     "rounded-md px-2 py-1 text-sm text-foreground/80 hover:bg-muted hover:text-foreground data-popup-open:bg-muted data-popup-open:text-foreground"
@@ -525,7 +563,7 @@ export function TopBar() {
           >
             {!ZOOM_PRESETS.includes(zoom) && (
               <option value="" disabled>
-                {zoom}%
+                {Math.round(zoom)}%
               </option>
             )}
             {ZOOM_PRESETS.map((z) => (
@@ -685,11 +723,7 @@ export function TopBar() {
 
       <SettingsDialog open={showSettings} onOpenChange={setShowSettings} />
       <DocumentDialog open={showDocument} onOpenChange={setShowDocument} />
-      <NewDocumentDialog
-        open={showNewDoc}
-        onOpenChange={setShowNewDoc}
-        onCreated={() => setName("Untitled")}
-      />
+      <NewDocumentDialog open={showNewDoc} onOpenChange={setShowNewDoc} />
       <ShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} />
       <input
         ref={openInputRef}

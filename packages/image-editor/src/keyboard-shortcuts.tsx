@@ -2,8 +2,8 @@
 
 import { useEffect } from "react"
 
-import { useEditor } from "./editor-context"
-import type { ToolId } from "./types"
+import { useEditor } from "./editor"
+import type { ToolId } from "./lib/types"
 
 const TOOL_KEYS: Record<string, ToolId> = {
   v: "move",

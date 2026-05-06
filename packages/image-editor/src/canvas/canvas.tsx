@@ -5,11 +5,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import { ImageIcon } from "@hugeicons/core-free-icons"
 
-import { useEditor } from "./editor-context"
+import { useEditor } from "../editor"
 import { cn } from "@workspace/ui/lib/utils"
-import illustration from "../illustration.webp"
-import { WelcomeScreen } from "./welcome-screen"
-import type { Anchor, Layer } from "./types"
+import illustration from "../assets/illustration.webp"
+import { WelcomeScreen } from "../welcome-screen"
+import type { Anchor, Layer } from "../lib/types"
 import {
   computeSnap,
   computeSpacingGuides,
@@ -21,122 +21,53 @@ import {
   type Rect,
   type ResizeHandle,
   type SpacingGuides,
-} from "./geometry"
-import { ensureFont, fontStack } from "./fonts"
-import { hasSvgFilter, LayerSvgFilter, svgFilterId } from "./svg-filters"
-
-const DEFAULT_DOC_W = 1200
-const DEFAULT_DOC_H = 800
-const SNAP_THRESHOLD = 6
-
-type DragState = {
-  primaryId: string
-  pointerId: number
-  startClientX: number
-  startClientY: number
-  starts: Map<string, { x: number; y: number }>
-  shifted: boolean
-  moved: boolean
-  committed: boolean
-}
-
-type MarqueeState = {
-  pointerId: number
-  startDocX: number
-  startDocY: number
-  curDocX: number
-  curDocY: number
-  additive: boolean
-  preselected: string[]
-}
-
-type ShapeDrawState = {
-  pointerId: number
-  startDocX: number
-  startDocY: number
-  curDocX: number
-  curDocY: number
-  variant: "rect" | "ellipse"
-}
-
-type StrokeState = {
-  pointerId: number
-  layerId: string
-  mode: "pencil" | "brush" | "eraser"
-}
-
-type ZoomDragState = {
-  pointerId: number
-  startDocX: number
-  startDocY: number
-  curDocX: number
-  curDocY: number
-}
-
-
-type ResizeState = {
-  id: string
-  handle: ResizeHandle
-  pointerId: number
-  startClientX: number
-  startClientY: number
-  startX: number
-  startY: number
-  startW: number
-  startH: number
-  ratio: number
-  committed: boolean
-  moved: boolean
-}
-
-type RotateState = {
-  id: string
-  pointerId: number
-  cx: number
-  cy: number
-  startAngle: number
-  startRotation: number
-  committed: boolean
-}
-
-type MultiTransformStart = {
-  id: string
-  x: number
-  y: number
-  width: number
-  height: number
-  rotation: number
-  fontSize?: number
-}
-
-type MultiResizeState = {
-  pointerId: number
-  handle: ResizeHandle
-  startClientX: number
-  startClientY: number
-  bounds: Rect
-  pivot: { x: number; y: number }
-  starts: MultiTransformStart[]
-  committed: boolean
-  moved: boolean
-}
-
-type MultiRotateState = {
-  pointerId: number
-  cx: number
-  cy: number
-  startAngle: number
-  starts: MultiTransformStart[]
-  committed: boolean
-}
-
-type PanState = {
-  pointerId: number
-  startClientX: number
-  startClientY: number
-  startPanX: number
-  startPanY: number
-}
+} from "../lib/geometry"
+import { ensureFont, fontStack } from "../pickers/fonts"
+import { hasSvgFilter, LayerSvgFilter, svgFilterId } from "../lib/svg-filters"
+import {
+  CANVAS_DRAW_TOOLS,
+  DEFAULT_DOC_H,
+  DEFAULT_DOC_W,
+  SNAP_THRESHOLD,
+  isCanvasDrawTool,
+  type DragState,
+  type MarqueeState,
+  type MultiResizeState,
+  type MultiRotateState,
+  type MultiTransformStart,
+  type PanState,
+  type ResizeState,
+  type RotateState,
+  type ShapeDrawState,
+  type StrokeState,
+  type ZoomDragState,
+} from "./types"
+import {
+  applyStroke,
+  compositeDocToCanvas,
+  floodFillMask,
+  hasFiles,
+  resolveCssColorToHex,
+  rgbToHex,
+  sampleColorAt,
+} from "./utils"
+import {
+  CheckerBackground,
+  DropOverlay,
+  Guides,
+  MarqueeRect,
+  Rulers,
+  RulerBadge,
+  ZoomRect,
+} from "./overlays"
+import { CropOverlay } from "./crop-overlay"
+import { PenOverlay, PathEditOverlay } from "./pen-overlays"
+import { MultiSelectionHandles, SelectionHandles } from "./handles"
+import {
+  RasterLayerView,
+  SpacingGuidesOverlay,
+  TextEditor,
+} from "./layer-views"
 
 export function Canvas() {
   const {
@@ -178,6 +109,9 @@ export function Canvas() {
     docSettings,
     prefs,
     viewToggles,
+    activeTabId,
+    newTab,
+    openImageInNewTab,
   } = useEditor()
   const scale = zoom / 100
   const DOC_W = docSettings?.width ?? DEFAULT_DOC_W
@@ -237,6 +171,18 @@ export function Canvas() {
       )
       if (!files.length) return
 
+      // Welcome state (no tab, OR active tab is empty): open the first
+      // image as a doc sized to its natural pixel dimensions (Photoshop
+      // "open as new document" flow). Subsequent files become layers.
+      if (!activeTabId || layers.length === 0) {
+        const [first, ...rest] = files
+        if (first) await openImageInNewTab(first)
+        for (const file of rest) {
+          await addImage(file)
+        }
+        return
+      }
+
       const rect = docRef.current?.getBoundingClientRect()
       const drop = rect
         ? {
@@ -254,7 +200,7 @@ export function Canvas() {
         offset += 24
       }
     },
-    [scale, addImage]
+    [scale, addImage, activeTabId, openImageInNewTab, DOC_W, DOC_H, layers.length]
   )
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -927,35 +873,52 @@ export function Canvas() {
     return () => window.removeEventListener("keydown", onKey)
   }, [zoomToRect, selectedIds, layers])
 
-  // Wheel zoom (Cmd/Ctrl) and trackpad pan
+  // Wheel zoom (Cmd/Ctrl) and trackpad pan. We route through a ref so rapid
+  // wheel events compose against the latest zoom/pan instead of clobbering
+  // each other with stale closure values, and we normalize deltaMode so a
+  // mouse wheel (lines) zooms at the same rate as a trackpad (pixels).
+  const wheelStateRef = useRef({ zoom, panX, panY })
+  useEffect(() => {
+    wheelStateRef.current = { zoom, panX, panY }
+  }, [zoom, panX, panY])
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
     const onWheel = (e: WheelEvent) => {
+      const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 800 : 1
+      const dx = e.deltaX * k
+      const dy = e.deltaY * k
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault()
         const rect = el.getBoundingClientRect()
         const cx = e.clientX - (rect.left + rect.width / 2)
         const cy = e.clientY - (rect.top + rect.height / 2)
-        const factor = Math.exp(-e.deltaY * 0.0015)
-        const nextZoom = Math.round(
-          Math.min(800, Math.max(5, zoom * factor))
-        )
-        const nextScale = nextZoom / 100
-        const ratio = nextScale / scale
-        const newPanX = cx - (cx - panX) * ratio
-        const newPanY = cy - (cy - panY) * ratio
+        const s = wheelStateRef.current
+        const factor = Math.exp(-dy * 0.003)
+        const nextZoom = Math.min(800, Math.max(5, s.zoom * factor))
+        const ratio = nextZoom / s.zoom
+        const newPanX = cx - (cx - s.panX) * ratio
+        const newPanY = cy - (cy - s.panY) * ratio
+        wheelStateRef.current = {
+          zoom: nextZoom,
+          panX: newPanX,
+          panY: newPanY,
+        }
         setZoom(nextZoom)
         setPan(newPanX, newPanY)
-      } else if (Math.abs(e.deltaX) > 0 || Math.abs(e.deltaY) > 0) {
-        // Trackpad two-finger pan; mouse wheel will also pan vertically
+      } else if (dx || dy) {
+        // Trackpad two-finger pan; mouse wheel pans vertically.
         e.preventDefault()
-        setPan(panX - e.deltaX, panY - e.deltaY)
+        const s = wheelStateRef.current
+        const newPanX = s.panX - dx
+        const newPanY = s.panY - dy
+        wheelStateRef.current = { ...s, panX: newPanX, panY: newPanY }
+        setPan(newPanX, newPanY)
       }
     }
     el.addEventListener("wheel", onWheel, { passive: false })
     return () => el.removeEventListener("wheel", onWheel)
-  }, [zoom, scale, panX, panY, setZoom, setPan])
+  }, [setZoom, setPan])
 
   const startLayerDrag = useCallback(
     (e: React.PointerEvent, layer: Layer) => {
@@ -1171,8 +1134,52 @@ export function Canvas() {
       if (tool === "text") {
         if (docX < 0 || docX > DOC_W || docY < 0 || docY > DOC_H) return
         e.preventDefault()
-        addText({ x: docX, y: docY })
-        setTool("move")
+        const startClientX = e.clientX
+        const startClientY = e.clientY
+        const startDocX = docX
+        const startDocY = docY
+        const pointerId = e.pointerId
+        let layerId: string | null = null
+        let dragging = false
+        const onMove = (ev: PointerEvent) => {
+          if (ev.pointerId !== pointerId) return
+          const docElInner = docRef.current
+          if (!docElInner) return
+          const dx = (ev.clientX - startClientX) / scale
+          const dy = (ev.clientY - startClientY) / scale
+          if (!dragging && Math.hypot(dx, dy) < 4) return
+          dragging = true
+          const r = docElInner.getBoundingClientRect()
+          const curX = (ev.clientX - r.left) / scale
+          const curY = (ev.clientY - r.top) / scale
+          const x = Math.min(startDocX, curX)
+          const y = Math.min(startDocY, curY)
+          const w = Math.max(1, Math.abs(curX - startDocX))
+          const h = Math.max(1, Math.abs(curY - startDocY))
+          if (!layerId) {
+            layerId = addText({ x, y, width: w, height: h, centered: false })
+          } else {
+            patch(layerId, {
+              x: Math.round(x),
+              y: Math.round(y),
+              width: Math.max(1, Math.round(w)),
+              height: Math.max(1, Math.round(h)),
+            })
+          }
+        }
+        const onUp = (ev: PointerEvent) => {
+          if (ev.pointerId !== pointerId) return
+          window.removeEventListener("pointermove", onMove)
+          window.removeEventListener("pointerup", onUp)
+          window.removeEventListener("pointercancel", onUp)
+          if (!dragging) {
+            addText({ x: startDocX, y: startDocY })
+          }
+          setTool("move")
+        }
+        window.addEventListener("pointermove", onMove)
+        window.addEventListener("pointerup", onUp)
+        window.addEventListener("pointercancel", onUp)
         return
       }
 
@@ -1350,10 +1357,12 @@ export function Canvas() {
         return
       }
 
-      // Marquee on canvas background
-      const target = e.target as HTMLElement
-      const onBg = target === e.currentTarget
-      if (!onBg && tool !== "marquee") return
+      // Marquee + deselect on canvas background. Layers stop propagation in
+      // move/marquee mode (see per-layer onPointerDown), so reaching this
+      // line means the click missed every unlocked layer — treat it as a
+      // background click: clear selection (unless extending with shift) and
+      // start a marquee.
+      if (tool !== "move" && tool !== "marquee") return
       e.preventDefault()
       setMarquee({
         pointerId: e.pointerId,
@@ -1411,6 +1420,22 @@ export function Canvas() {
     [scale, setCursor, tool, penAnchors.length]
   )
 
+  const finishPenPath = useCallback(
+    (closed: boolean) => {
+      if (penAnchors.length >= 2) {
+        addPath({
+          anchors: penAnchors,
+          closed,
+          strokeWidth: 2,
+          color: brushColor,
+        })
+      }
+      setPenAnchors([])
+      setPenHover(null)
+    },
+    [penAnchors, addPath, brushColor]
+  )
+
   // Pen Esc/Enter
   useEffect(() => {
     if (tool !== "pen") return
@@ -1419,21 +1444,12 @@ export function Canvas() {
         setPenAnchors([])
         setPenHover(null)
       } else if (e.key === "Enter") {
-        if (penAnchors.length >= 2) {
-          addPath({
-            anchors: penAnchors,
-            closed: false,
-            strokeWidth: 2,
-            color: brushColor,
-          })
-        }
-        setPenAnchors([])
-        setPenHover(null)
+        finishPenPath(false)
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [tool, penAnchors, addPath, brushColor])
+  }, [tool, finishPenPath])
 
   // Reset pen state when switching tools away
   useEffect(() => {
@@ -1455,8 +1471,12 @@ export function Canvas() {
     if (pan) return "cursor-grabbing select-none"
     if (panMode) return "cursor-grab"
     if (drag) return "cursor-grabbing select-none"
+    if (tool === "pen" || tool === "pencil" || tool === "brush") {
+      return "cursor-crosshair"
+    }
+    if (tool === "text") return "cursor-text"
     return ""
-  }, [pan, panMode, drag])
+  }, [pan, panMode, drag, tool])
 
   return (
     <div
@@ -1468,6 +1488,9 @@ export function Canvas() {
       onPointerDown={onContainerPointerDown}
       onPointerMove={onPointerMoveCanvas}
       onPointerLeave={() => setCursor(null)}
+      onDoubleClick={() => {
+        if (tool === "pen" && penAnchors.length >= 2) finishPenPath(false)
+      }}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -1494,17 +1517,52 @@ export function Canvas() {
         data-doc-surface="true"
         hidden={layers.length === 0}
         className="relative shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_-8px_rgba(0,0,0,0.18),0_40px_80px_-32px_rgba(0,0,0,0.25)] ring-1 ring-border"
-        style={{
-          width: DOC_W,
-          height: DOC_H,
-          background: docSettings?.background ?? "var(--color-background)",
-          backgroundImage: viewToggles?.grid
-            ? "linear-gradient(to right, color-mix(in oklch, var(--color-foreground), transparent 90%) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in oklch, var(--color-foreground), transparent 90%) 1px, transparent 1px)"
-            : undefined,
-          backgroundSize: viewToggles?.grid ? "20px 20px" : undefined,
-          transform: `translate(${panX}px, ${panY}px) scale(${scale})`,
-          transformOrigin: "center center",
-        }}
+        style={(() => {
+          const bg = docSettings?.background ?? "var(--color-background)"
+          const transparent =
+            !docSettings?.background ||
+            bg === "transparent" ||
+            bg === "none"
+          // Photoshop-style transparency checker rendered via two stacked
+          // 45° linear gradients (proven cross-browser pattern). Each
+          // gradient paints opposing corners of a 20×20 tile; the second
+          // is offset by 10px to interleave into a checkerboard.
+          const checkerImage =
+            "linear-gradient(45deg, #cfcfcf 25%, transparent 25%, transparent 75%, #cfcfcf 75%, #cfcfcf), linear-gradient(45deg, #cfcfcf 25%, transparent 25%, transparent 75%, #cfcfcf 75%, #cfcfcf)"
+          const gridImage =
+            "linear-gradient(to right, color-mix(in oklch, var(--color-foreground), transparent 90%) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in oklch, var(--color-foreground), transparent 90%) 1px, transparent 1px)"
+          const grid = viewToggles?.grid
+          let backgroundImage: string | undefined
+          let backgroundSize: string | undefined
+          let backgroundRepeat: string | undefined
+          let backgroundPosition: string | undefined
+          if (transparent && grid) {
+            backgroundImage = `${gridImage}, ${checkerImage}`
+            backgroundSize = "20px 20px, 20px 20px, 20px 20px, 20px 20px"
+            backgroundPosition = "0 0, 0 0, 0 0, 10px 10px"
+            backgroundRepeat = "repeat"
+          } else if (transparent) {
+            backgroundImage = checkerImage
+            backgroundSize = "20px 20px, 20px 20px"
+            backgroundPosition = "0 0, 10px 10px"
+            backgroundRepeat = "repeat"
+          } else if (grid) {
+            backgroundImage = gridImage
+            backgroundSize = "20px 20px"
+            backgroundRepeat = "repeat"
+          }
+          return {
+            width: DOC_W,
+            height: DOC_H,
+            backgroundColor: transparent ? "#ffffff" : bg,
+            backgroundImage,
+            backgroundSize,
+            backgroundPosition,
+            backgroundRepeat,
+            transform: `translate(${panX}px, ${panY}px) scale(${scale})`,
+            transformOrigin: "center center",
+          }
+        })()}
       >
         <svg
           aria-hidden
@@ -1572,6 +1630,9 @@ export function Canvas() {
               ? `${fx.stroke.width}px solid ${fx.stroke.color}`
               : undefined
 
+            const showCropFrame =
+              tool === "crop" && selected && l.id !== "bg" && !l.locked
+
             const common = {
               className: cn(
                 "absolute select-none outline-none",
@@ -1595,29 +1656,27 @@ export function Canvas() {
                 boxShadow: innerBox,
                 outline: strokeOutline,
                 outlineOffset: strokeOutline ? 0 : undefined,
-                clipPath: l.crop
-                  ? `inset(${l.crop.y}px ${l.width - l.crop.x - l.crop.width}px ${l.height - l.crop.y - l.crop.height}px ${l.crop.x}px)`
-                  : undefined,
+                // While the crop tool is active on this layer, drop the
+                // clipPath so the dim mask and handles in CropOverlay aren't
+                // themselves clipped away by the saved crop.
+                clipPath:
+                  l.crop && !showCropFrame
+                    ? `inset(${l.crop.y}px ${l.width - l.crop.x - l.crop.width}px ${l.height - l.crop.y - l.crop.height}px ${l.crop.x}px)`
+                    : undefined,
                 // Locked layers don't catch canvas clicks — clicks pass
                 // through so layers underneath can be selected. Lock UI
                 // lives in the Layers panel.
                 pointerEvents: l.locked ? "none" : undefined,
               } as React.CSSProperties,
               onPointerDown: (e: React.PointerEvent) => {
-                // Tools that act on the doc background (zoom, picker, wand,
-                // marquee, pen, shape, raster strokes, text) shouldn't fire
-                // when the user clicks a layer. Stop propagation so the
-                // container handler skips this click. Painting tools still
-                // need to start strokes that may begin on top of layers, so
-                // for those we let propagation continue.
+                // Canvas-drawing tools (paint, shape, pen, text) need clicks
+                // to bubble to the container handler even when they land on
+                // an existing layer — otherwise the user can't draw over a
+                // layer. Other tools stop propagation so the click only
+                // selects/drags this layer.
                 if (l.locked) return
                 if (panMode) return
-                const paintingTool =
-                  tool === "pencil" ||
-                  tool === "brush" ||
-                  tool === "eraser" ||
-                  tool === "shape"
-                if (!paintingTool) {
+                if (!isCanvasDrawTool(tool)) {
                   e.stopPropagation()
                 }
                 if (tool === "move") {
@@ -1629,6 +1688,9 @@ export function Canvas() {
                 if (panMode) return
                 if (l.locked) return
                 if (e.shiftKey) return // handled in pointerdown
+                // In drawing modes a click on a layer is the start of a new
+                // stroke/shape/anchor — it shouldn't change selection.
+                if (isCanvasDrawTool(tool)) return
                 if (!selectedIds.includes(l.id)) select(l.id)
               },
               onDoubleClick: (e: React.MouseEvent) => {
@@ -1639,8 +1701,6 @@ export function Canvas() {
               },
             }
 
-            const showCropFrame =
-              tool === "crop" && selected && l.id !== "bg" && !l.locked
             // Single-select transform controls render at the top level (see
             // below the layer loop) so they paint above front-most layers.
             // Crop frame stays nested — it relies on per-layer clipping.
@@ -1661,7 +1721,7 @@ export function Canvas() {
                     src={l.src}
                     alt={l.name}
                     draggable={false}
-                    className="pointer-events-none size-full rounded-md object-cover"
+                    className="pointer-events-none size-full object-cover"
                   />
                   {overlay}
                 </div>
@@ -1679,7 +1739,7 @@ export function Canvas() {
                     draggable={false}
                     loading="lazy"
                     placeholder="blur"
-                    className="pointer-events-none rounded-md object-cover"
+                    className="pointer-events-none object-cover"
                   />
                   {overlay}
                 </div>
@@ -1952,1320 +2012,4 @@ export function Canvas() {
   )
 }
 
-const HANDLES: {
-  id: ResizeHandle
-  left: string
-  top: string
-  cursor: string
-}[] = [
-  { id: "nw", left: "0%", top: "0%", cursor: "nwse-resize" },
-  { id: "n", left: "50%", top: "0%", cursor: "ns-resize" },
-  { id: "ne", left: "100%", top: "0%", cursor: "nesw-resize" },
-  { id: "e", left: "100%", top: "50%", cursor: "ew-resize" },
-  { id: "se", left: "100%", top: "100%", cursor: "nwse-resize" },
-  { id: "s", left: "50%", top: "100%", cursor: "ns-resize" },
-  { id: "sw", left: "0%", top: "100%", cursor: "nesw-resize" },
-  { id: "w", left: "0%", top: "50%", cursor: "ew-resize" },
-]
 
-function SelectionHandles({
-  scale,
-  onResize,
-  onRotate,
-}: {
-  scale: number
-  onResize: (e: React.PointerEvent, handle: ResizeHandle) => void
-  onRotate: (e: React.PointerEvent) => void
-}) {
-  const inv = 1 / Math.max(scale, 0.001)
-  const handlePx = 9
-  const rotateOffset = 22
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      {HANDLES.map((h) => (
-        <div
-          key={h.id}
-          onPointerDown={(e) => onResize(e, h.id)}
-          className="pointer-events-auto absolute"
-          style={{
-            left: h.left,
-            top: h.top,
-            width: handlePx,
-            height: handlePx,
-            transform: `translate(-50%, -50%) scale(${inv})`,
-            background: "var(--color-background)",
-            border: "1.5px solid var(--color-primary)",
-            borderRadius: 2,
-            cursor: h.cursor,
-            touchAction: "none",
-            zIndex: 10,
-          }}
-        />
-      ))}
-      {/* line connecting top edge to rotate handle */}
-      <div
-        aria-hidden
-        className="absolute"
-        style={{
-          left: "50%",
-          top: 0,
-          width: 0,
-          height: rotateOffset * inv,
-          borderLeft: "1px solid var(--color-primary)",
-          transform: `translate(-50%, -100%)`,
-          pointerEvents: "none",
-        }}
-      />
-      <div
-        onPointerDown={onRotate}
-        className="pointer-events-auto absolute"
-        style={{
-          left: "50%",
-          top: 0,
-          width: handlePx + 3,
-          height: handlePx + 3,
-          transform: `translate(-50%, calc(-${rotateOffset}px * ${inv} - 50%)) scale(${inv})`,
-          background: "var(--color-background)",
-          border: "1.5px solid var(--color-primary)",
-          borderRadius: "50%",
-          cursor: "alias",
-          touchAction: "none",
-          zIndex: 10,
-        }}
-      />
-    </div>
-  )
-}
-
-function CropOverlay({
-  layer,
-  scale,
-  onCropChange,
-  onCommit,
-}: {
-  layer: Layer
-  scale: number
-  onCropChange: (
-    crop: { x: number; y: number; width: number; height: number } | null
-  ) => void
-  onCommit: () => void
-}) {
-  const crop =
-    layer.crop ?? {
-      x: 0,
-      y: 0,
-      width: layer.width,
-      height: layer.height,
-    }
-  const inv = 1 / Math.max(scale, 0.001)
-  const handlePx = 9
-  const committedRef = useRef(false)
-
-  const onHandle = (corner: "nw" | "ne" | "sw" | "se") =>
-    (e: React.PointerEvent) => {
-      e.stopPropagation()
-      e.preventDefault()
-      committedRef.current = false
-      const startClientX = e.clientX
-      const startClientY = e.clientY
-      const start = { ...crop }
-
-      const onMove = (ev: PointerEvent) => {
-        const dx = (ev.clientX - startClientX) / scale
-        const dy = (ev.clientY - startClientY) / scale
-        let nx = start.x
-        let ny = start.y
-        let nw = start.width
-        let nh = start.height
-        if (corner === "se" || corner === "ne") nw = start.width + dx
-        if (corner === "sw" || corner === "nw") {
-          nw = start.width - dx
-          nx = start.x + dx
-        }
-        if (corner === "se" || corner === "sw") nh = start.height + dy
-        if (corner === "ne" || corner === "nw") {
-          nh = start.height - dy
-          ny = start.y + dy
-        }
-        nx = Math.max(0, Math.min(layer.width - 1, nx))
-        ny = Math.max(0, Math.min(layer.height - 1, ny))
-        nw = Math.max(1, Math.min(layer.width - nx, nw))
-        nh = Math.max(1, Math.min(layer.height - ny, nh))
-        if (!committedRef.current) {
-          onCommit()
-          committedRef.current = true
-        }
-        onCropChange({
-          x: Math.round(nx),
-          y: Math.round(ny),
-          width: Math.round(nw),
-          height: Math.round(nh),
-        })
-      }
-      const onUp = () => {
-        window.removeEventListener("pointermove", onMove)
-        window.removeEventListener("pointerup", onUp)
-      }
-      window.addEventListener("pointermove", onMove)
-      window.addEventListener("pointerup", onUp)
-    }
-
-  const dim: React.CSSProperties = {
-    position: "absolute",
-    background: "rgba(0,0,0,0.45)",
-    pointerEvents: "none",
-  }
-
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      {/* dimmed outside */}
-      <div
-        style={{
-          ...dim,
-          left: 0,
-          top: 0,
-          width: layer.width,
-          height: crop.y,
-        }}
-      />
-      <div
-        style={{
-          ...dim,
-          left: 0,
-          top: crop.y + crop.height,
-          width: layer.width,
-          height: layer.height - crop.y - crop.height,
-        }}
-      />
-      <div
-        style={{
-          ...dim,
-          left: 0,
-          top: crop.y,
-          width: crop.x,
-          height: crop.height,
-        }}
-      />
-      <div
-        style={{
-          ...dim,
-          left: crop.x + crop.width,
-          top: crop.y,
-          width: layer.width - crop.x - crop.width,
-          height: crop.height,
-        }}
-      />
-      {/* frame */}
-      <div
-        className="pointer-events-none absolute"
-        style={{
-          left: crop.x,
-          top: crop.y,
-          width: crop.width,
-          height: crop.height,
-          outline: `${1 * inv}px solid var(--color-primary)`,
-        }}
-      />
-      {/* corner handles */}
-      {(["nw", "ne", "sw", "se"] as const).map((c) => {
-        const cx = c.includes("e") ? crop.x + crop.width : crop.x
-        const cy = c.includes("s") ? crop.y + crop.height : crop.y
-        return (
-          <div
-            key={c}
-            onPointerDown={onHandle(c)}
-            className="pointer-events-auto absolute"
-            style={{
-              left: cx,
-              top: cy,
-              width: handlePx,
-              height: handlePx,
-              transform: `translate(-50%, -50%) scale(${inv})`,
-              background: "var(--color-background)",
-              border: "1.5px solid var(--color-primary)",
-              borderRadius: 2,
-              cursor:
-                c === "nw" || c === "se" ? "nwse-resize" : "nesw-resize",
-              touchAction: "none",
-            }}
-          />
-        )
-      })}
-    </div>
-  )
-}
-
-function compositeDocToCanvas(
-  layers: Layer[],
-  getRasterCanvas: (id: string) => HTMLCanvasElement,
-  width: number,
-  height: number
-): HTMLCanvasElement {
-  const out = document.createElement("canvas")
-  out.width = width
-  out.height = height
-  const ctx = out.getContext("2d")
-  if (!ctx) return out
-  for (const l of [...layers].reverse()) {
-    if (!l.visible) continue
-    ctx.save()
-    ctx.globalAlpha = l.opacity / 100
-    const cx = l.x + l.width / 2
-    const cy = l.y + l.height / 2
-    ctx.translate(cx, cy)
-    ctx.rotate((l.rotation * Math.PI) / 180)
-    ctx.translate(-l.width / 2, -l.height / 2)
-    if (l.crop) {
-      ctx.beginPath()
-      ctx.rect(l.crop.x, l.crop.y, l.crop.width, l.crop.height)
-      ctx.clip()
-    }
-    if (l.kind === "raster") {
-      const rc = getRasterCanvas(l.id)
-      if (rc.width > 0 && rc.height > 0) {
-        try {
-          ctx.drawImage(rc, 0, 0, l.width, l.height)
-        } catch {
-          // ignore
-        }
-      }
-    } else if (l.kind === "shape" && l.shape === "ellipse") {
-      ctx.fillStyle = resolveCssColorToHex(l.color ?? "#000") ?? "#000"
-      ctx.beginPath()
-      ctx.ellipse(
-        l.width / 2,
-        l.height / 2,
-        l.width / 2,
-        l.height / 2,
-        0,
-        0,
-        Math.PI * 2
-      )
-      ctx.fill()
-    } else if (l.kind === "path" && l.path) {
-      const color = resolveCssColorToHex(l.color ?? "#000") ?? "#000"
-      const p = new Path2D(l.path)
-      if (l.pathClosed) {
-        ctx.fillStyle = color
-        ctx.fill(p)
-      }
-      ctx.strokeStyle = color
-      ctx.lineWidth = l.pathStrokeWidth ?? 2
-      ctx.lineCap = "round"
-      ctx.lineJoin = "round"
-      ctx.stroke(p)
-    } else if (l.color) {
-      ctx.fillStyle = resolveCssColorToHex(l.color) ?? l.color
-      ctx.fillRect(0, 0, l.width, l.height)
-    }
-    ctx.restore()
-  }
-  return out
-}
-
-function floodFillMask(
-  layers: Layer[],
-  getRasterCanvas: (id: string) => HTMLCanvasElement,
-  startX: number,
-  startY: number,
-  tolerance: number,
-  DOC_W: number,
-  DOC_H: number
-): { dataUrl: string; width: number; height: number } | null {
-  const composite = compositeDocToCanvas(layers, getRasterCanvas, DOC_W, DOC_H)
-  const ctx = composite.getContext("2d", { willReadFrequently: true })
-  if (!ctx) return null
-  let img: ImageData
-  try {
-    img = ctx.getImageData(0, 0, DOC_W, DOC_H)
-  } catch {
-    return null
-  }
-  const data = img.data
-  if (
-    startX < 0 ||
-    startX >= DOC_W ||
-    startY < 0 ||
-    startY >= DOC_H
-  )
-    return null
-  const idx0 = (startY * DOC_W + startX) * 4
-  const r0 = data[idx0]!
-  const g0 = data[idx0 + 1]!
-  const b0 = data[idx0 + 2]!
-  const tol2 = tolerance * tolerance
-  const mask = new Uint8Array(DOC_W * DOC_H)
-  // Iterative scan-line flood fill
-  const stack: number[] = [startX, startY]
-  while (stack.length) {
-    const y = stack.pop()!
-    const x = stack.pop()!
-    let lx = x
-    while (lx >= 0 && !mask[y * DOC_W + lx] && near(data, lx, y, r0, g0, b0))
-      lx--
-    lx++
-    let rx = x
-    while (rx < DOC_W && !mask[y * DOC_W + rx] && near(data, rx, y, r0, g0, b0))
-      rx++
-    rx--
-    for (let i = lx; i <= rx; i++) {
-      mask[y * DOC_W + i] = 1
-    }
-    for (const yy of [y - 1, y + 1]) {
-      if (yy < 0 || yy >= DOC_H) continue
-      let i = lx
-      while (i <= rx) {
-        while (
-          i <= rx &&
-          (mask[yy * DOC_W + i] || !near(data, i, yy, r0, g0, b0))
-        )
-          i++
-        if (i > rx) break
-        const segStart = i
-        while (
-          i <= rx &&
-          !mask[yy * DOC_W + i] &&
-          near(data, i, yy, r0, g0, b0)
-        )
-          i++
-        stack.push(segStart, yy)
-      }
-    }
-  }
-  function near(
-    d: Uint8ClampedArray,
-    x: number,
-    y: number,
-    rr: number,
-    gg: number,
-    bb: number
-  ) {
-    const idx = (y * DOC_W + x) * 4
-    const dr = d[idx]! - rr
-    const dg = d[idx + 1]! - gg
-    const db = d[idx + 2]! - bb
-    return dr * dr + dg * dg + db * db <= tol2
-  }
-  // Render mask as semi-transparent overlay
-  const out = document.createElement("canvas")
-  out.width = DOC_W
-  out.height = DOC_H
-  const oc = out.getContext("2d")
-  if (!oc) return null
-  const overlay = oc.createImageData(DOC_W, DOC_H)
-  for (let i = 0; i < DOC_W * DOC_H; i++) {
-    if (mask[i]) {
-      overlay.data[i * 4] = 79
-      overlay.data[i * 4 + 1] = 122
-      overlay.data[i * 4 + 2] = 255
-      overlay.data[i * 4 + 3] = 110
-    }
-  }
-  oc.putImageData(overlay, 0, 0)
-  return {
-    dataUrl: out.toDataURL("image/png"),
-    width: DOC_W,
-    height: DOC_H,
-  }
-}
-
-function applyStroke(
-  ctx: CanvasRenderingContext2D,
-  mode: "pencil" | "brush" | "eraser",
-  color: string,
-  size: number,
-  hardness: number,
-  pts: { x: number; y: number }[]
-) {
-  ctx.save()
-  if (mode === "eraser") {
-    ctx.globalCompositeOperation = "destination-out"
-    ctx.strokeStyle = "rgba(0,0,0,1)"
-  } else {
-    ctx.globalCompositeOperation = "source-over"
-    ctx.strokeStyle = color
-  }
-  ctx.lineCap = "round"
-  ctx.lineJoin = "round"
-  ctx.lineWidth = Math.max(1, size)
-  if (mode === "brush") {
-    ctx.shadowColor = mode === "brush" ? color : "transparent"
-    ctx.shadowBlur = Math.max(0, (1 - hardness) * size)
-  }
-  ctx.beginPath()
-  for (let i = 0; i < pts.length; i++) {
-    const p = pts[i]!
-    if (i === 0) ctx.moveTo(p.x, p.y)
-    else ctx.lineTo(p.x, p.y)
-  }
-  ctx.stroke()
-  ctx.restore()
-}
-
-async function sampleColorAt(
-  docX: number,
-  docY: number,
-  layers: Layer[],
-  getRasterCanvas: (id: string) => HTMLCanvasElement
-): Promise<string | null> {
-  // Try EyeDropper API first
-  const Eye = (window as unknown as {
-    EyeDropper?: new () => { open: () => Promise<{ sRGBHex: string }> }
-  }).EyeDropper
-  if (Eye) {
-    try {
-      const ed = new Eye()
-      const r = await ed.open()
-      return r.sRGBHex
-    } catch {
-      // user cancelled — fall through
-    }
-  }
-  // Composite layers ourselves at the point
-  const probe = document.createElement("canvas")
-  probe.width = 1
-  probe.height = 1
-  const ctx = probe.getContext("2d", { willReadFrequently: true })
-  if (!ctx) return null
-  ctx.fillStyle = "white"
-  ctx.fillRect(0, 0, 1, 1)
-  for (const l of [...layers].reverse()) {
-    if (!l.visible) continue
-    if (docX < l.x || docX > l.x + l.width) continue
-    if (docY < l.y || docY > l.y + l.height) continue
-    ctx.save()
-    ctx.globalAlpha = l.opacity / 100
-    if (l.kind === "raster") {
-      const c = getRasterCanvas(l.id)
-      const sx = ((docX - l.x) / l.width) * c.width
-      const sy = ((docY - l.y) / l.height) * c.height
-      try {
-        ctx.drawImage(c, sx, sy, 1, 1, 0, 0, 1, 1)
-      } catch {
-        // ignore
-      }
-    } else if (l.kind === "image") {
-      // Skip images we can't easily sample without async load
-    } else if (l.color) {
-      const resolved = resolveCssColorToHex(l.color) ?? l.color
-      ctx.fillStyle = resolved
-      ctx.fillRect(0, 0, 1, 1)
-    }
-    ctx.restore()
-  }
-  const data = ctx.getImageData(0, 0, 1, 1).data
-  return rgbToHex(data[0]!, data[1]!, data[2]!)
-}
-
-function resolveCssColorToHex(raw: string): string | null {
-  if (typeof window === "undefined") return null
-  const probe = document.createElement("span")
-  probe.style.position = "absolute"
-  probe.style.visibility = "hidden"
-  probe.style.color = ""
-  probe.style.color = raw
-  document.body.appendChild(probe)
-  const computed = window.getComputedStyle(probe).color
-  document.body.removeChild(probe)
-  const m = computed.match(/rgba?\(([^)]+)\)/)
-  if (!m) return null
-  const parts = m[1]!.split(",").map((s) => parseFloat(s.trim()))
-  if (parts.length < 3) return null
-  return rgbToHex(parts[0]!, parts[1]!, parts[2]!)
-}
-
-function rgbToHex(r: number, g: number, b: number) {
-  const c = (n: number) =>
-    Math.max(0, Math.min(255, Math.round(n)))
-      .toString(16)
-      .padStart(2, "0")
-  return `#${c(r)}${c(g)}${c(b)}`
-}
-
-function RasterLayerView({
-  layer,
-  common,
-  children,
-}: {
-  layer: Layer
-  common: {
-    className: string
-    style: React.CSSProperties
-    onPointerDown: (e: React.PointerEvent) => void
-    onMouseDown: (e: React.MouseEvent) => void
-  }
-  children: React.ReactNode
-}) {
-  const { getRasterCanvas } = useEditor()
-  const hostRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    const canvas = getRasterCanvas(layer.id)
-    if (canvas.width === 0)
-      canvas.width = layer.rasterWidth ?? layer.width ?? 1200
-    if (canvas.height === 0)
-      canvas.height = layer.rasterHeight ?? layer.height ?? 800
-    canvas.style.width = "100%"
-    canvas.style.height = "100%"
-    canvas.style.display = "block"
-    canvas.style.pointerEvents = "none"
-    const host = hostRef.current
-    if (host && canvas.parentElement !== host) {
-      host.replaceChildren(canvas)
-    }
-    // Repaint canvas whenever the layer's stored rasterDataUrl differs from
-    // what was last applied to the canvas. This covers initial hydrate,
-    // undo, and redo.
-    const applied = (canvas as unknown as { __applied?: string }).__applied
-    const target = layer.rasterDataUrl ?? ""
-    if (applied !== target) {
-      const ctx = canvas.getContext("2d")
-      if (ctx) {
-        if (!target) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height)
-          ;(canvas as unknown as { __applied?: string }).__applied = ""
-        } else {
-          const img = new window.Image()
-          img.onload = () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height)
-            ctx.drawImage(img, 0, 0)
-            ;(canvas as unknown as { __applied?: string }).__applied = target
-          }
-          img.src = target
-        }
-      }
-    }
-  }, [
-    layer.id,
-    layer.rasterDataUrl,
-    layer.rasterWidth,
-    layer.rasterHeight,
-    layer.width,
-    layer.height,
-    getRasterCanvas,
-  ])
-  return (
-    <div {...common}>
-      <div ref={hostRef} className="size-full" />
-      {children}
-    </div>
-  )
-}
-
-function PenOverlay({
-  anchors,
-  hover,
-  scale,
-  docW,
-  docH,
-}: {
-  anchors: Anchor[]
-  hover: { x: number; y: number } | null
-  scale: number
-  docW: number
-  docH: number
-}) {
-  const inv = 1 / Math.max(scale, 0.001)
-  const handle = 8
-  const lineWidth = 1 / Math.max(scale, 0.001)
-  const d =
-    anchors.length === 0
-      ? ""
-      : anchors
-          .map((a, i) => {
-            if (i === 0) return `M${a.x} ${a.y}`
-            const prev = anchors[i - 1]!
-            if (prev.hOut || a.hIn) {
-              const c1 = prev.hOut ?? { x: prev.x, y: prev.y }
-              const c2 = a.hIn ?? { x: a.x, y: a.y }
-              return `C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${a.x} ${a.y}`
-            }
-            return `L${a.x} ${a.y}`
-          })
-          .join(" ") +
-        (hover ? ` L${hover.x} ${hover.y}` : "")
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-0"
-      style={{ overflow: "visible" }}
-    >
-      <svg
-        width={docW}
-        height={docH}
-        className="absolute inset-0"
-        style={{ overflow: "visible" }}
-      >
-        <path
-          d={d}
-          fill="none"
-          stroke="var(--color-primary)"
-          strokeWidth={lineWidth}
-          strokeDasharray={`${4 * inv} ${4 * inv}`}
-        />
-        {anchors.map((a, i) => (
-          <g key={i}>
-            {a.hIn && (
-              <line
-                x1={a.x}
-                y1={a.y}
-                x2={a.hIn.x}
-                y2={a.hIn.y}
-                stroke="var(--color-primary)"
-                strokeWidth={lineWidth}
-                opacity={0.6}
-              />
-            )}
-            {a.hOut && (
-              <line
-                x1={a.x}
-                y1={a.y}
-                x2={a.hOut.x}
-                y2={a.hOut.y}
-                stroke="var(--color-primary)"
-                strokeWidth={lineWidth}
-                opacity={0.6}
-              />
-            )}
-          </g>
-        ))}
-      </svg>
-      {anchors.map((a, i) => (
-        <div key={`anc-${i}`}>
-          <div
-            className="absolute"
-            style={{
-              left: a.x,
-              top: a.y,
-              width: handle,
-              height: handle,
-              transform: `translate(-50%, -50%) scale(${inv})`,
-              background:
-                i === 0 ? "var(--color-primary)" : "var(--color-background)",
-              border: "1.5px solid var(--color-primary)",
-              borderRadius: i === 0 ? "50%" : 2,
-            }}
-          />
-          {a.hIn && (
-            <div
-              className="absolute"
-              style={{
-                left: a.hIn.x,
-                top: a.hIn.y,
-                width: handle - 2,
-                height: handle - 2,
-                transform: `translate(-50%, -50%) scale(${inv})`,
-                background: "var(--color-background)",
-                border: "1px solid var(--color-primary)",
-                borderRadius: "50%",
-              }}
-            />
-          )}
-          {a.hOut && (
-            <div
-              className="absolute"
-              style={{
-                left: a.hOut.x,
-                top: a.hOut.y,
-                width: handle - 2,
-                height: handle - 2,
-                transform: `translate(-50%, -50%) scale(${inv})`,
-                background: "var(--color-background)",
-                border: "1px solid var(--color-primary)",
-                borderRadius: "50%",
-              }}
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function PathEditOverlay({
-  layerId,
-  anchors,
-  onChange,
-  onCommit,
-  scale,
-}: {
-  layerId: string
-  anchors: Anchor[]
-  onChange: (anchors: Anchor[]) => void
-  onCommit: () => void
-  scale: number
-}) {
-  const inv = 1 / Math.max(scale, 0.001)
-  const handle = 9
-
-  const startDrag = (
-    e: React.PointerEvent,
-    idx: number,
-    kind: "anchor" | "in" | "out"
-  ) => {
-    e.stopPropagation()
-    e.preventDefault()
-    const a = anchors[idx]
-    if (!a) return
-    const startClientX = e.clientX
-    const startClientY = e.clientY
-    const start = { ...a, hIn: a.hIn ? { ...a.hIn } : undefined, hOut: a.hOut ? { ...a.hOut } : undefined }
-    let committed = false
-    const onMove = (ev: PointerEvent) => {
-      const dx = (ev.clientX - startClientX) / scale
-      const dy = (ev.clientY - startClientY) / scale
-      if (!committed && Math.hypot(dx, dy) > 1) {
-        onCommit()
-        committed = true
-      }
-      const next = anchors.slice()
-      if (kind === "anchor") {
-        next[idx] = {
-          x: start.x + dx,
-          y: start.y + dy,
-          hIn: start.hIn
-            ? { x: start.hIn.x + dx, y: start.hIn.y + dy }
-            : undefined,
-          hOut: start.hOut
-            ? { x: start.hOut.x + dx, y: start.hOut.y + dy }
-            : undefined,
-        }
-      } else if (kind === "out") {
-        const newOut = {
-          x: (start.hOut?.x ?? start.x) + dx,
-          y: (start.hOut?.y ?? start.y) + dy,
-        }
-        // Mirror hIn for symmetric editing
-        const mirroredIn = {
-          x: 2 * start.x - newOut.x,
-          y: 2 * start.y - newOut.y,
-        }
-        next[idx] = { ...start, hOut: newOut, hIn: mirroredIn }
-      } else {
-        const newIn = {
-          x: (start.hIn?.x ?? start.x) + dx,
-          y: (start.hIn?.y ?? start.y) + dy,
-        }
-        const mirroredOut = {
-          x: 2 * start.x - newIn.x,
-          y: 2 * start.y - newIn.y,
-        }
-        next[idx] = { ...start, hIn: newIn, hOut: mirroredOut }
-      }
-      onChange(next)
-    }
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove)
-      window.removeEventListener("pointerup", onUp)
-    }
-    window.addEventListener("pointermove", onMove)
-    window.addEventListener("pointerup", onUp)
-  }
-
-  const dot = (
-    cx: number,
-    cy: number,
-    onPointerDown: (e: React.PointerEvent) => void,
-    filled: boolean,
-    cursor = "pointer"
-  ) => (
-    <div
-      onPointerDown={onPointerDown}
-      className="pointer-events-auto absolute"
-      style={{
-        left: cx,
-        top: cy,
-        width: handle,
-        height: handle,
-        transform: `translate(-50%, -50%) scale(${inv})`,
-        background: filled ? "var(--color-primary)" : "var(--color-background)",
-        border: "1.5px solid var(--color-primary)",
-        borderRadius: filled ? "50%" : 2,
-        cursor,
-        touchAction: "none",
-      }}
-    />
-  )
-
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-0"
-      data-layer={layerId}
-      style={{ overflow: "visible" }}
-    >
-      {anchors.map((a, i) => (
-        <div key={i}>
-          {dot(a.x, a.y, (e) => startDrag(e, i, "anchor"), false, "move")}
-          {a.hIn && dot(a.hIn.x, a.hIn.y, (e) => startDrag(e, i, "in"), true)}
-          {a.hOut && dot(a.hOut.x, a.hOut.y, (e) => startDrag(e, i, "out"), true)}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function ZoomRect({
-  drag,
-  scale,
-}: {
-  drag: ZoomDragState
-  scale: number
-}) {
-  const x = Math.min(drag.startDocX, drag.curDocX)
-  const y = Math.min(drag.startDocY, drag.curDocY)
-  const w = Math.abs(drag.curDocX - drag.startDocX)
-  const h = Math.abs(drag.curDocY - drag.startDocY)
-  if (w < 1 && h < 1) return null
-  const lineWidth = 1 / Math.max(scale, 0.001)
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute"
-      style={{
-        left: x,
-        top: y,
-        width: w,
-        height: h,
-        outline: `${lineWidth}px dashed var(--color-primary)`,
-        background: "color-mix(in oklch, var(--color-primary), transparent 90%)",
-      }}
-    />
-  )
-}
-
-function MarqueeRect({
-  marquee,
-  scale,
-}: {
-  marquee: MarqueeState
-  scale: number
-}) {
-  const x = Math.min(marquee.startDocX, marquee.curDocX)
-  const y = Math.min(marquee.startDocY, marquee.curDocY)
-  const w = Math.abs(marquee.curDocX - marquee.startDocX)
-  const h = Math.abs(marquee.curDocY - marquee.startDocY)
-  if (w < 1 && h < 1) return null
-  const lineWidth = 1 / Math.max(scale, 0.001)
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute"
-      style={{
-        left: x,
-        top: y,
-        width: w,
-        height: h,
-        background: "color-mix(in oklch, var(--color-primary), transparent 85%)",
-        outline: `${lineWidth}px solid var(--color-primary)`,
-      }}
-    />
-  )
-}
-
-function Guides({
-  v,
-  h,
-  scale,
-  docW,
-  docH,
-}: {
-  v: number[]
-  h: number[]
-  scale: number
-  docW: number
-  docH: number
-}) {
-  if (v.length === 0 && h.length === 0) return null
-  const lineWidth = 1 / Math.max(scale, 0.001)
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-0"
-      style={{ overflow: "visible" }}
-    >
-      {v.map((x, i) => (
-        <div
-          key={`v-${i}-${x}`}
-          className="absolute"
-          style={{
-            left: x,
-            top: -docH,
-            width: lineWidth,
-            height: docH * 3,
-            background: "var(--color-primary)",
-          }}
-        />
-      ))}
-      {h.map((y, i) => (
-        <div
-          key={`h-${i}-${y}`}
-          className="absolute"
-          style={{
-            top: y,
-            left: -docW,
-            height: lineWidth,
-            width: docW * 3,
-            background: "var(--color-primary)",
-          }}
-        />
-      ))}
-    </div>
-  )
-}
-
-function TextEditor({
-  initial,
-  onCommit,
-  onCancel,
-}: {
-  initial: string
-  onCommit: (text: string) => void
-  onCancel: () => void
-}) {
-  const ref = useRef<HTMLSpanElement | null>(null)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    el.focus()
-    // Place cursor at end + select all so typing replaces
-    const range = document.createRange()
-    range.selectNodeContents(el)
-    const sel = window.getSelection()
-    sel?.removeAllRanges()
-    sel?.addRange(range)
-  }, [])
-  return (
-    <span
-      ref={ref}
-      contentEditable
-      suppressContentEditableWarning
-      onPointerDown={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-      onDoubleClick={(e) => e.stopPropagation()}
-      onBlur={(e) => onCommit(e.currentTarget.textContent ?? "")}
-      onKeyDown={(e) => {
-        e.stopPropagation()
-        if (e.key === "Escape") {
-          e.preventDefault()
-          onCancel()
-        } else if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault()
-          onCommit((e.currentTarget as HTMLElement).textContent ?? "")
-        }
-      }}
-      className="min-w-[1ch] outline-none ring-1 ring-primary"
-      style={{ caretColor: "var(--color-primary)" }}
-    >
-      {initial}
-    </span>
-  )
-}
-
-function Rulers({
-  docW,
-  docH,
-  scale,
-  panX,
-  panY,
-}: {
-  docW: number
-  docH: number
-  scale: number
-  panX: number
-  panY: number
-}) {
-  // Major tick = 100 doc-px; minor = 10 doc-px.
-  const majorPx = 100 * scale
-  const minorPx = 10 * scale
-  // The doc is centered in the container with translate(panX, panY) scale.
-  // We render a fixed strip overlay; the offset to align tick 0 with doc(0)
-  // is the doc's screen-left/top coord.
-  const docLeft = `calc(50% - ${docW / 2}px * ${scale} + ${panX}px)`
-  const docTop = `calc(50% - ${docH / 2}px * ${scale} + ${panY}px)`
-  return (
-    <>
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 z-10 h-4 border-b border-border bg-background/90 backdrop-blur"
-        style={{
-          backgroundImage: `linear-gradient(to right, var(--color-border) 1px, transparent 1px), linear-gradient(to right, color-mix(in oklch, var(--color-border), transparent 50%) 1px, transparent 1px)`,
-          backgroundSize: `${majorPx}px 100%, ${minorPx}px 100%`,
-          backgroundPosition: `${docLeft} 0, ${docLeft} 0`,
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-y-0 start-0 top-4 z-10 w-4 border-e border-border bg-background/90 backdrop-blur"
-        style={{
-          backgroundImage: `linear-gradient(to bottom, var(--color-border) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in oklch, var(--color-border), transparent 50%) 1px, transparent 1px)`,
-          backgroundSize: `100% ${majorPx}px, 100% ${minorPx}px`,
-          backgroundPosition: `0 ${docTop}, 0 ${docTop}`,
-        }}
-      />
-    </>
-  )
-}
-
-function MultiSelectionHandles({
-  bounds,
-  scale,
-  onResizeStart,
-  onRotateStart,
-}: {
-  bounds: Rect
-  scale: number
-  onResizeStart: (
-    e: React.PointerEvent,
-    handle: ResizeHandle,
-    pivotClient: { x: number; y: number }
-  ) => void
-  onRotateStart: (
-    e: React.PointerEvent,
-    centerClient: { x: number; y: number }
-  ) => void
-}) {
-  const inv = 1 / Math.max(scale, 0.001)
-  const handlePx = 9
-  const rotateOffset = 22
-  const lineWidth = 1 / Math.max(scale, 0.001)
-
-  const oppositeForHandle = (handle: ResizeHandle): { x: number; y: number } => {
-    let x = bounds.x + bounds.width / 2
-    let y = bounds.y + bounds.height / 2
-    if (handle === "e" || handle === "ne" || handle === "se") x = bounds.x
-    if (handle === "w" || handle === "nw" || handle === "sw")
-      x = bounds.x + bounds.width
-    if (handle === "s" || handle === "se" || handle === "sw") y = bounds.y
-    if (handle === "n" || handle === "ne" || handle === "nw")
-      y = bounds.y + bounds.height
-    return { x, y }
-  }
-
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute"
-      style={{
-        left: bounds.x,
-        top: bounds.y,
-        width: bounds.width,
-        height: bounds.height,
-      }}
-    >
-      <div
-        className="absolute inset-0"
-        style={{
-          outline: `${lineWidth}px solid var(--color-primary)`,
-        }}
-      />
-      {HANDLES.map((h) => (
-        <div
-          key={h.id}
-          onPointerDown={(e) => {
-            const docEl = (e.currentTarget as HTMLDivElement).closest(
-              "[data-doc-surface='true']"
-            ) as HTMLElement | null
-            if (!docEl) return
-            const docRect = docEl.getBoundingClientRect()
-            const pivot = oppositeForHandle(h.id)
-            onResizeStart(e, h.id, {
-              x: docRect.left + pivot.x * scale,
-              y: docRect.top + pivot.y * scale,
-            })
-          }}
-          className="pointer-events-auto absolute"
-          style={{
-            left: h.left,
-            top: h.top,
-            width: handlePx,
-            height: handlePx,
-            transform: `translate(-50%, -50%) scale(${inv})`,
-            background: "var(--color-background)",
-            border: "1.5px solid var(--color-primary)",
-            borderRadius: 2,
-            cursor: h.cursor,
-            touchAction: "none",
-            zIndex: 10,
-          }}
-        />
-      ))}
-      <div
-        aria-hidden
-        className="absolute"
-        style={{
-          left: "50%",
-          top: 0,
-          width: 0,
-          height: rotateOffset * inv,
-          borderLeft: "1px solid var(--color-primary)",
-          transform: `translate(-50%, -100%)`,
-          pointerEvents: "none",
-        }}
-      />
-      <div
-        onPointerDown={(e) => {
-          const docEl = (e.currentTarget as HTMLDivElement).closest(
-            "[data-doc-surface='true']"
-          ) as HTMLElement | null
-          if (!docEl) return
-          const docRect = docEl.getBoundingClientRect()
-          onRotateStart(e, {
-            x: docRect.left + (bounds.x + bounds.width / 2) * scale,
-            y: docRect.top + (bounds.y + bounds.height / 2) * scale,
-          })
-        }}
-        className="pointer-events-auto absolute"
-        style={{
-          left: "50%",
-          top: 0,
-          width: handlePx + 3,
-          height: handlePx + 3,
-          transform: `translate(-50%, calc(-${rotateOffset}px * ${inv} - 50%)) scale(${inv})`,
-          background: "var(--color-background)",
-          border: "1.5px solid var(--color-primary)",
-          borderRadius: "50%",
-          cursor: "alias",
-          touchAction: "none",
-          zIndex: 10,
-        }}
-      />
-    </div>
-  )
-}
-
-function SpacingGuidesOverlay({
-  guides,
-  scale,
-}: {
-  guides: SpacingGuides[]
-  scale: number
-}) {
-  if (!guides.length) return null
-  const lineWidth = 1 / Math.max(scale, 0.001)
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-0"
-      style={{ overflow: "visible" }}
-    >
-      {guides.map((g, gi) =>
-        g.spans.map((s, si) => {
-          if (g.axis === "x") {
-            return (
-              <div key={`${gi}-${si}-x`}>
-                <div
-                  className="absolute"
-                  style={{
-                    left: s.a,
-                    top: s.cross - 4,
-                    width: s.b - s.a,
-                    height: 8,
-                    borderTop: `${lineWidth}px dashed var(--color-primary)`,
-                    borderBottom: `${lineWidth}px dashed var(--color-primary)`,
-                    opacity: 0.7,
-                  }}
-                />
-                <div
-                  className="absolute font-mono text-[10px] text-primary"
-                  style={{
-                    left: (s.a + s.b) / 2,
-                    top: s.cross - 12,
-                    transform: `translate(-50%, -100%) scale(${1 / Math.max(scale, 0.001)})`,
-                    transformOrigin: "center bottom",
-                  }}
-                >
-                  {Math.round(s.gap)}
-                </div>
-              </div>
-            )
-          }
-          return (
-            <div key={`${gi}-${si}-y`}>
-              <div
-                className="absolute"
-                style={{
-                  left: s.cross - 4,
-                  top: s.a,
-                  width: 8,
-                  height: s.b - s.a,
-                  borderLeft: `${lineWidth}px dashed var(--color-primary)`,
-                  borderRight: `${lineWidth}px dashed var(--color-primary)`,
-                  opacity: 0.7,
-                }}
-              />
-              <div
-                className="absolute font-mono text-[10px] text-primary"
-                style={{
-                  left: s.cross + 8,
-                  top: (s.a + s.b) / 2,
-                  transform: `translate(0, -50%) scale(${1 / Math.max(scale, 0.001)})`,
-                  transformOrigin: "left center",
-                }}
-              >
-                {Math.round(s.gap)}
-              </div>
-            </div>
-          )
-        })
-      )}
-    </div>
-  )
-}
-
-function hasFiles(e: React.DragEvent) {
-  return Array.from(e.dataTransfer.types).includes("Files")
-}
-
-function DropOverlay() {
-  return (
-    <div className="pointer-events-none absolute inset-3 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary bg-primary/5 text-primary">
-      <HugeiconsIcon icon={ImageIcon} className="size-6" />
-      <p className="text-sm font-medium">Drop image to add as a layer</p>
-    </div>
-  )
-}
-
-function CheckerBackground() {
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-0"
-      style={{
-        backgroundImage:
-          "radial-gradient(circle, color-mix(in oklch, var(--color-foreground), transparent 88%) 1px, transparent 1px)",
-        backgroundSize: "16px 16px",
-      }}
-    />
-  )
-}
-
-function RulerBadge({
-  zoom,
-  cursor,
-  docW,
-  docH,
-}: {
-  zoom: number
-  cursor: { x: number; y: number } | null
-  docW: number
-  docH: number
-}) {
-  return (
-    <div className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-2 rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground shadow-sm ring-1 ring-border backdrop-blur">
-      <span className="font-mono">
-        {docW} × {docH}
-      </span>
-      <span className="text-foreground/40">·</span>
-      <span className="font-mono">{zoom}%</span>
-      {cursor && (
-        <>
-          <span className="text-foreground/40">·</span>
-          <span className="font-mono">
-            {Math.round(cursor.x)}, {Math.round(cursor.y)}
-          </span>
-        </>
-      )}
-    </div>
-  )
-}

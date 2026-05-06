@@ -1,7 +1,8 @@
 "use client"
 
 import { cn } from "@workspace/ui/lib/utils"
-import { useEditor, type ViewToggles } from "./editor-context"
+import { useEditor } from "../editor"
+import type { ViewToggles } from "../editor/doc"
 
 const TOGGLES: Array<{ key: keyof ViewToggles; label: string }> = [
   { key: "rulers", label: "Rulers" },

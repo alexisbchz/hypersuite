@@ -7,9 +7,9 @@ import {
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
 import { Separator } from "@workspace/ui/components/separator"
-import { AssetsPanel } from "./assets-panel"
-import { LayersPanel } from "./layers-panel"
-import { PropertiesPanel } from "./properties-panel"
+import { AssetsPanel } from "../panels/assets-panel"
+import { LayersPanel } from "../panels/layers-panel"
+import { PropertiesPanel } from "../panels/properties-panel"
 
 export function RightPanel() {
   return (

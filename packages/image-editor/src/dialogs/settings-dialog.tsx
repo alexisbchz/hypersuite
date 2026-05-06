@@ -15,12 +15,12 @@ import { Switch } from "@workspace/ui/components/switch"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 
+import { useEditor } from "../editor"
 import {
   DEFAULT_PREFS,
   DEFAULT_VIEW_TOGGLES,
-  useEditor,
   type ViewToggles,
-} from "./editor-context"
+} from "../editor/doc"
 
 const ZOOM_PRESETS = [50, 75, 100, 150]
 

@@ -1,6 +1,6 @@
 import JSZip from "jszip"
 import type { Layer } from "./types"
-import { DEFAULT_DOC_SETTINGS, type DocSettings } from "./editor-context"
+import { DEFAULT_DOC_SETTINGS, type DocSettings } from "../editor/doc"
 
 export const HYPERIMG_VERSION = 1
 

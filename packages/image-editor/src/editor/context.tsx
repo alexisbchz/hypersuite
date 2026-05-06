@@ -9,51 +9,47 @@ import {
   useRef,
   useState,
 } from "react"
-import type { Anchor, Layer, ShapeVariant, ToolId } from "./types"
 
-export function anchorsToSvgD(
-  anchors: Anchor[],
-  closed: boolean,
-  origin: { x: number; y: number }
-) {
-  if (!anchors.length) return ""
-  const ox = origin.x
-  const oy = origin.y
-  const segs: string[] = []
-  for (let i = 0; i < anchors.length; i++) {
-    const a = anchors[i]!
-    if (i === 0) {
-      segs.push(`M${a.x - ox} ${a.y - oy}`)
-      continue
-    }
-    const prev = anchors[i - 1]!
-    const c1 = prev.hOut
-    const c2 = a.hIn
-    if (c1 || c2) {
-      const cp1 = c1 ?? { x: prev.x, y: prev.y }
-      const cp2 = c2 ?? { x: a.x, y: a.y }
-      segs.push(
-        `C${cp1.x - ox} ${cp1.y - oy} ${cp2.x - ox} ${cp2.y - oy} ${a.x - ox} ${a.y - oy}`
-      )
-    } else {
-      segs.push(`L${a.x - ox} ${a.y - oy}`)
-    }
-  }
-  if (closed && anchors.length >= 2) {
-    const first = anchors[0]!
-    const last = anchors[anchors.length - 1]!
-    const c1 = last.hOut
-    const c2 = first.hIn
-    if (c1 || c2) {
-      const cp1 = c1 ?? { x: last.x, y: last.y }
-      const cp2 = c2 ?? { x: first.x, y: first.y }
-      segs.push(
-        `C${cp1.x - ox} ${cp1.y - oy} ${cp2.x - ox} ${cp2.y - oy} ${first.x - ox} ${first.y - oy}`
-      )
-    }
-    segs.push("Z")
-  }
-  return segs.join(" ")
+import {
+  DEFAULT_DOC_SETTINGS,
+  DEFAULT_PREFS,
+  DEFAULT_VIEW_TOGGLES,
+  type DocSettings,
+  type Prefs,
+  type Recent,
+  type ViewToggles,
+} from "./doc"
+import {
+  AUTOSAVE_DELAY_MS,
+  RECENTS_LIMIT,
+  clearPersistedDoc,
+  loadPersistedDoc,
+  loadPersistedPrefs,
+  loadPersistedRecents,
+  savePersistedDoc,
+  savePersistedPrefs,
+  savePersistedRecents,
+} from "./storage"
+import {
+  anchorsToSvgD,
+  pathBoundsFromAnchors,
+  pathBoundsUnion,
+} from "../lib/geometry"
+import type { Anchor, Layer, ShapeVariant, ToolId } from "../lib/types"
+
+const HISTORY_LIMIT = 100
+
+export type Tab = { id: string; name: string }
+
+type TabSnapshot = {
+  layers: Layer[]
+  past: Layer[][]
+  future: Layer[][]
+  selectedIds: string[]
+  docSettings: DocSettings
+  zoom: number
+  panX: number
+  panY: number
 }
 
 type DocState = {
@@ -63,54 +59,6 @@ type DocState = {
 }
 
 type SelectOpts = { additive?: boolean; toggle?: boolean }
-
-export type DocSettings = {
-  width: number
-  height: number
-  background: string
-  dpi: number
-  bleed: number
-  safeArea: number
-}
-
-export const DEFAULT_DOC_SETTINGS: DocSettings = {
-  width: 1200,
-  height: 800,
-  background: "var(--color-background)",
-  dpi: 72,
-  bleed: 0,
-  safeArea: 0,
-}
-
-export type Prefs = {
-  snapThreshold: number
-  defaultZoom: number
-}
-
-export const DEFAULT_PREFS: Prefs = {
-  snapThreshold: 6,
-  defaultZoom: 75,
-}
-
-export type ViewToggles = {
-  rulers: boolean
-  grid: boolean
-  snapping: boolean
-  guides: boolean
-}
-
-export const DEFAULT_VIEW_TOGGLES: ViewToggles = {
-  rulers: false,
-  grid: false,
-  snapping: true,
-  guides: true,
-}
-
-export type Recent = {
-  name: string
-  thumbnail: string
-  savedAt: number
-}
 
 type EditorState = {
   tool: ToolId
@@ -136,7 +84,14 @@ type EditorState = {
     file: File,
     opts?: { x?: number; y?: number; maxSize?: number }
   ) => Promise<void>
-  addText: (opts: { x: number; y: number; text?: string }) => string
+  addText: (opts: {
+    x: number
+    y: number
+    text?: string
+    width?: number
+    height?: number
+    centered?: boolean
+  }) => string
   addShape: (opts: {
     x: number
     y: number
@@ -210,6 +165,21 @@ type EditorState = {
   replaceDoc: (layers: Layer[], settings?: Partial<DocSettings>) => void
   resetDoc: () => void
 
+  // Tabs (multi-document editing)
+  tabs: Tab[]
+  activeTabId: string | null
+  filename: string
+  setFilename: (name: string) => void
+  newTab: (opts?: {
+    name?: string
+    layers?: Layer[]
+    docSettings?: Partial<DocSettings>
+  }) => string
+  switchTab: (id: string) => void
+  closeTab: (id: string) => void
+  renameTab: (id: string, name: string) => void
+  openImageInNewTab: (file: File) => Promise<string | null>
+
   // Editor prefs
   prefs: Prefs
   setPref: <K extends keyof Prefs>(k: K, v: Prefs[K]) => void
@@ -230,132 +200,13 @@ type EditorState = {
 
 const Ctx = createContext<EditorState | null>(null)
 
-const HISTORY_LIMIT = 100
-const STORAGE_KEY = "hypersuite.image.doc.v2"
-const PREFS_KEY = "hypersuite.image.prefs.v1"
-const RECENTS_KEY = "hypersuite.image.recents.v1"
-const RECENTS_LIMIT = 5
-const AUTOSAVE_DELAY_MS = 400
-
-function isPersistableLayer(l: Layer) {
-  // blob: URLs don't survive a reload, so skip those layers entirely.
-  return !(l.src && l.src.startsWith("blob:"))
-}
-
-type PersistedDoc = { layers: Layer[]; settings?: DocSettings }
-
-function loadPersisted(): PersistedDoc | null {
-  if (typeof window === "undefined") return null
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    if (!parsed || !Array.isArray(parsed.layers)) return null
-    return parsed as PersistedDoc
-  } catch {
-    return null
-  }
-}
-
-function loadPrefs(): {
-  prefs: Prefs
-  viewToggles: ViewToggles
-} {
-  if (typeof window === "undefined")
-    return { prefs: DEFAULT_PREFS, viewToggles: DEFAULT_VIEW_TOGGLES }
-  try {
-    const raw = window.localStorage.getItem(PREFS_KEY)
-    if (!raw) return { prefs: DEFAULT_PREFS, viewToggles: DEFAULT_VIEW_TOGGLES }
-    const parsed = JSON.parse(raw)
-    return {
-      prefs: { ...DEFAULT_PREFS, ...(parsed.prefs ?? {}) },
-      viewToggles: {
-        ...DEFAULT_VIEW_TOGGLES,
-        ...(parsed.viewToggles ?? {}),
-      },
-    }
-  } catch {
-    return { prefs: DEFAULT_PREFS, viewToggles: DEFAULT_VIEW_TOGGLES }
-  }
-}
-
-function loadRecents(): Recent[] {
-  if (typeof window === "undefined") return []
-  try {
-    const raw = window.localStorage.getItem(RECENTS_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as Recent[]) : []
-  } catch {
-    return []
-  }
-}
-
-// Layer order convention: index 0 is the front-most layer (top of the
-// Layers panel). Render path uses `.slice().reverse()` so layers[0] paints
-// last and ends up visually on top. The initial state is therefore ordered
-// front-to-back: title is at index 0, bg (background) is at the end.
-const initial: Layer[] = [
-  {
-    id: "title",
-    name: "Title",
-    kind: "text",
-    visible: true,
-    locked: false,
-    opacity: 100,
-    blendMode: "normal",
-    x: 120,
-    y: 600,
-    width: 600,
-    height: 80,
-    rotation: 0,
-    color: "var(--color-foreground)",
-  },
-  {
-    id: "rect",
-    name: "Accent rectangle",
-    kind: "shape",
-    visible: true,
-    locked: false,
-    opacity: 90,
-    blendMode: "multiply",
-    x: 640,
-    y: 360,
-    width: 360,
-    height: 280,
-    rotation: -6,
-    color: "oklch(0.6 0.22 3.958)",
-  },
-  {
-    id: "photo",
-    name: "Hero photo",
-    kind: "image",
-    visible: true,
-    locked: false,
-    opacity: 100,
-    blendMode: "normal",
-    x: 80,
-    y: 80,
-    width: 720,
-    height: 480,
-    rotation: 0,
-  },
-  {
-    id: "bg",
-    name: "Background",
-    kind: "shape",
-    visible: true,
-    locked: true,
-    opacity: 100,
-    blendMode: "normal",
-    x: 0,
-    y: 0,
-    width: 1200,
-    height: 800,
-    rotation: 0,
-    color: "var(--color-muted)",
-  },
-]
+const loadImage = (src: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new window.Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error(`image load failed: ${src}`))
+    img.src = src
+  })
 
 export function EditorProvider({ children }: { children: React.ReactNode }) {
   const [tool, setTool] = useState<ToolId>("move")
@@ -373,75 +224,6 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     DEFAULT_VIEW_TOGGLES
   )
   const [recents, setRecents] = useState<Recent[]>([])
-  const hydratedRef = useRef(false)
-
-  // Hydrate from localStorage on mount. Synchronous setState in effect is
-  // intentional here — it's the React-recommended pattern for syncing with
-  // an external store on mount, and runs at most once.
-  useEffect(() => {
-    if (hydratedRef.current) return
-    hydratedRef.current = true
-    const saved = loadPersisted()
-    if (saved && saved.layers.length) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setDoc({ layers: saved.layers, past: [], future: [] })
-      if (saved.settings) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setDocSettingsState({ ...DEFAULT_DOC_SETTINGS, ...saved.settings })
-      }
-      setSelectedIds([])
-    }
-    const loadedPrefs = loadPrefs()
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPrefsState(loadedPrefs.prefs)
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setViewTogglesState(loadedPrefs.viewToggles)
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRecents(loadRecents())
-  }, [])
-
-  // Autosave on layer or settings changes (debounced)
-  useEffect(() => {
-    if (!hydratedRef.current) return
-    if (typeof window === "undefined") return
-    const t = window.setTimeout(() => {
-      try {
-        const persistable = doc.layers.filter(isPersistableLayer)
-        window.localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({ layers: persistable, settings: docSettings })
-        )
-      } catch {
-        // quota exceeded or storage disabled — silently ignore
-      }
-    }, AUTOSAVE_DELAY_MS)
-    return () => window.clearTimeout(t)
-  }, [doc.layers, docSettings])
-
-  // Persist prefs + viewToggles
-  useEffect(() => {
-    if (!hydratedRef.current) return
-    if (typeof window === "undefined") return
-    try {
-      window.localStorage.setItem(
-        PREFS_KEY,
-        JSON.stringify({ prefs, viewToggles })
-      )
-    } catch {
-      /* ignore */
-    }
-  }, [prefs, viewToggles])
-
-  // Persist recents
-  useEffect(() => {
-    if (!hydratedRef.current) return
-    if (typeof window === "undefined") return
-    try {
-      window.localStorage.setItem(RECENTS_KEY, JSON.stringify(recents))
-    } catch {
-      /* ignore */
-    }
-  }, [recents])
   const [zoom, setZoomState] = useState(75)
   const [panX, setPanX] = useState(0)
   const [panY, setPanY] = useState(0)
@@ -456,6 +238,65 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     { dataUrl: string; width: number; height: number } | null
   >(null)
   const rasterCanvasRef = useRef<Map<string, HTMLCanvasElement>>(new Map())
+  const hydratedRef = useRef(false)
+
+  // Multi-tab state. The currently-active tab's data lives in the existing
+  // `doc`/`selectedIds`/`docSettings`/`zoom`/`pan*` states above (so all
+  // existing logic keeps working). When switching/creating tabs we snapshot
+  // the active state into `tabSnapshotsRef` and restore from it on switch.
+  const [tabs, setTabs] = useState<Tab[]>([])
+  const [activeTabId, setActiveTabId] = useState<string | null>(null)
+  const tabSnapshotsRef = useRef<Map<string, TabSnapshot>>(new Map())
+
+  // Hydrate from localStorage once on mount. Synchronous setState in an
+  // effect is the React-recommended pattern for syncing with an external
+  // store on mount.
+  useEffect(() => {
+    if (hydratedRef.current) return
+    hydratedRef.current = true
+    const saved = loadPersistedDoc()
+    if (saved && saved.layers.length) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDoc({ layers: saved.layers, past: [], future: [] })
+      if (saved.settings) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setDocSettingsState({ ...DEFAULT_DOC_SETTINGS, ...saved.settings })
+      }
+      // Reify a tab for the restored autosave so the tab bar reflects it.
+      const restoredId = `tab-restored-${Date.now()}`
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTabs([{ id: restoredId, name: "Untitled" }])
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveTabId(restoredId)
+    }
+    const loaded = loadPersistedPrefs()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPrefsState(loaded.prefs)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setViewTogglesState(loaded.viewToggles)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRecents(loadPersistedRecents())
+  }, [])
+
+  // Autosave layers + settings (debounced).
+  useEffect(() => {
+    if (!hydratedRef.current) return
+    const t = window.setTimeout(
+      () => savePersistedDoc(doc.layers, docSettings),
+      AUTOSAVE_DELAY_MS
+    )
+    return () => window.clearTimeout(t)
+  }, [doc.layers, docSettings])
+
+  useEffect(() => {
+    if (!hydratedRef.current) return
+    savePersistedPrefs(prefs, viewToggles)
+  }, [prefs, viewToggles])
+
+  useEffect(() => {
+    if (!hydratedRef.current) return
+    savePersistedRecents(recents)
+  }, [recents])
 
   const select = useCallback(
     (id: string | null, opts: SelectOpts = {}) => {
@@ -704,12 +545,22 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   )
 
   const addText = useCallback(
-    (opts: { x: number; y: number; text?: string }) => {
+    (opts: {
+      x: number
+      y: number
+      text?: string
+      width?: number
+      height?: number
+      centered?: boolean
+    }) => {
       const id = `text-${Date.now()}`
       const text = opts.text ?? "Text"
       const fontSize = 48
-      const width = Math.max(80, text.length * fontSize * 0.5)
-      const height = Math.round(fontSize * 1.4)
+      const defaultWidth = Math.max(80, text.length * fontSize * 0.5)
+      const defaultHeight = Math.round(fontSize * 1.4)
+      const width = Math.round(opts.width ?? defaultWidth)
+      const height = Math.round(opts.height ?? defaultHeight)
+      const centered = opts.centered ?? opts.width === undefined
       const layer: Layer = {
         id,
         name: text.slice(0, 24),
@@ -718,9 +569,9 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
         locked: false,
         opacity: 100,
         blendMode: "normal",
-        x: Math.round(opts.x - width / 2),
-        y: Math.round(opts.y - height / 2),
-        width: Math.round(width),
+        x: Math.round(centered ? opts.x - width / 2 : opts.x),
+        y: Math.round(centered ? opts.y - height / 2 : opts.y),
+        width,
         height,
         rotation: 0,
         color: "var(--color-foreground)",
@@ -768,36 +619,6 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     [apply]
   )
 
-  const computePathBounds = (
-    anchors: Anchor[],
-    pad: number
-  ): { x: number; y: number; width: number; height: number } => {
-    const xs: number[] = []
-    const ys: number[] = []
-    for (const a of anchors) {
-      xs.push(a.x)
-      ys.push(a.y)
-      if (a.hIn) {
-        xs.push(a.hIn.x)
-        ys.push(a.hIn.y)
-      }
-      if (a.hOut) {
-        xs.push(a.hOut.x)
-        ys.push(a.hOut.y)
-      }
-    }
-    const minX = Math.min(...xs)
-    const minY = Math.min(...ys)
-    const maxX = Math.max(...xs)
-    const maxY = Math.max(...ys)
-    return {
-      x: Math.floor(minX - pad),
-      y: Math.floor(minY - pad),
-      width: Math.ceil(maxX - minX + pad * 2),
-      height: Math.ceil(maxY - minY + pad * 2),
-    }
-  }
-
   const addPath = useCallback(
     (opts: {
       anchors: Anchor[]
@@ -807,7 +628,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     }) => {
       if (opts.anchors.length < 2) return ""
       const sw = opts.strokeWidth ?? 2
-      const bounds = computePathBounds(opts.anchors, sw + 4)
+      const bounds = pathBoundsFromAnchors(opts.anchors, sw + 4)
       const d = anchorsToSvgD(opts.anchors, opts.closed, bounds)
       const id = `path-${Date.now()}`
       const layer: Layer = {
@@ -842,37 +663,19 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       layers: d.layers.map((l) => {
         if (l.id !== id || l.kind !== "path") return l
         const sw = l.pathStrokeWidth ?? 2
-        const bounds = {
-          x: l.x,
-          y: l.y,
-          width: l.width,
-          height: l.height,
-        }
-        // Recompute bounds if anchors moved outside; use a generous union.
-        const xs: number[] = [bounds.x]
-        const ys: number[] = [bounds.y]
-        xs.push(bounds.x + bounds.width)
-        ys.push(bounds.y + bounds.height)
-        for (const a of anchors) {
-          xs.push(a.x, a.hIn?.x ?? a.x, a.hOut?.x ?? a.x)
-          ys.push(a.y, a.hIn?.y ?? a.y, a.hOut?.y ?? a.y)
-        }
-        const pad = sw + 4
-        const newBounds = {
-          x: Math.floor(Math.min(...xs) - pad),
-          y: Math.floor(Math.min(...ys) - pad),
-          width: Math.ceil(Math.max(...xs) - Math.min(...xs) + pad * 2),
-          height: Math.ceil(Math.max(...ys) - Math.min(...ys) + pad * 2),
-        }
-        const dStr = anchorsToSvgD(anchors, l.pathClosed ?? false, newBounds)
+        const bounds = pathBoundsUnion(
+          anchors,
+          { x: l.x, y: l.y, width: l.width, height: l.height },
+          sw + 4
+        )
         return {
           ...l,
           anchors,
-          path: dStr,
-          x: newBounds.x,
-          y: newBounds.y,
-          width: newBounds.width,
-          height: newBounds.height,
+          path: anchorsToSvgD(anchors, l.pathClosed ?? false, bounds),
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
         }
       }),
     }))
@@ -929,43 +732,33 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     if (!canvas) return false
     const ctx = canvas.getContext("2d")
     if (!ctx) return false
-    const img = new window.Image()
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve()
-      img.onerror = () => reject(new Error("mask load failed"))
-      img.src = pixelMask.dataUrl
-    })
-    // Snapshot pre-state for undo
-    let pre: string | null = null
-    try {
-      pre = canvas.toDataURL("image/png")
-    } catch {
-      pre = null
+
+    const mask = await loadImage(pixelMask.dataUrl)
+    const safeToDataURL = () => {
+      try {
+        return canvas.toDataURL("image/png")
+      } catch {
+        return null
+      }
     }
-    setDoc((d) => ({
-      ...d,
-      layers: d.layers.map((l) =>
-        l.id === sel.id ? { ...l, rasterDataUrl: pre } : l
-      ),
-      past: [...d.past, d.layers].slice(-HISTORY_LIMIT),
-      future: [],
-    }))
+    const pre = safeToDataURL()
     ctx.save()
     ctx.globalCompositeOperation = "destination-out"
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    ctx.drawImage(mask, 0, 0, canvas.width, canvas.height)
     ctx.restore()
-    let post: string | null = null
-    try {
-      post = canvas.toDataURL("image/png")
-    } catch {
-      post = null
-    }
-    ;(canvas as unknown as { __applied?: string }).__applied = post ?? ""
+    const post = safeToDataURL()
+
     setDoc((d) => ({
-      ...d,
       layers: d.layers.map((l) =>
         l.id === sel.id ? { ...l, rasterDataUrl: post } : l
       ),
+      past: [
+        ...d.past,
+        d.layers.map((l) =>
+          l.id === sel.id ? { ...l, rasterDataUrl: pre } : l
+        ),
+      ].slice(-HISTORY_LIMIT),
+      future: [],
     }))
     setPixelMask(null)
     return true
@@ -995,19 +788,11 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     ) => {
       if (!file.type.startsWith("image/")) return
       const src = URL.createObjectURL(file)
-      const dims = await new Promise<{ w: number; h: number }>(
-        (resolve, reject) => {
-          const img = new window.Image()
-          img.onload = () =>
-            resolve({ w: img.naturalWidth, h: img.naturalHeight })
-          img.onerror = reject
-          img.src = src
-        }
-      )
+      const img = await loadImage(src)
       const max = opts.maxSize ?? 600
-      const ratio = Math.min(1, max / Math.max(dims.w, dims.h))
-      const width = Math.round(dims.w * ratio)
-      const height = Math.round(dims.h * ratio)
+      const ratio = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight))
+      const width = Math.round(img.naturalWidth * ratio)
+      const height = Math.round(img.naturalHeight * ratio)
       const id = `img-${Date.now()}`
       const layer: Layer = {
         id,
@@ -1031,7 +816,10 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   )
 
   const setZoom = useCallback((z: number) => {
-    setZoomState(Math.round(Math.min(800, Math.max(5, z))))
+    // Keep zoom as a float so wheel zoom is smooth — small fractional
+    // deltas (~0.3%) need to land in state to actually move the canvas.
+    // Display sites round when rendering the percentage label.
+    setZoomState(Math.min(800, Math.max(5, z)))
   }, [])
 
   const setPan = useCallback((x: number, y: number) => {
@@ -1059,18 +847,12 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       )
       const ns = nextZoom / 100
       // Center the rect in the viewport. The doc is centered via flex; pan
-      // shifts it from center. We want rect's center in doc coords (rcx, rcy)
-      // to map to the viewport center.
+      // shifts it from center. Doc center in doc coords is (600, 400).
       const rcx = rect.x + rect.width / 2
       const rcy = rect.y + rect.height / 2
-      // Doc center in doc coords is (DOC_W/2, DOC_H/2) = (600, 400). After
-      // scale, rect center sits at (rcx - 600) * ns relative to viewport center.
-      // To put it at viewport center, pan must offset that.
-      const newPanX = -(rcx - 600) * ns
-      const newPanY = -(rcy - 400) * ns
       setZoomState(nextZoom)
-      setPanX(newPanX)
-      setPanY(newPanY)
+      setPanX(-(rcx - 600) * ns)
+      setPanY(-(rcy - 400) * ns)
     },
     []
   )
@@ -1085,14 +867,10 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       apply((ls) => {
         const sel = ls.filter((l) => selectedIds.includes(l.id) && !l.locked)
         if (sel.length < 2) return ls
-        const lefts = sel.map((l) => l.x)
-        const rights = sel.map((l) => l.x + l.width)
-        const tops = sel.map((l) => l.y)
-        const bottoms = sel.map((l) => l.y + l.height)
-        const minLeft = Math.min(...lefts)
-        const maxRight = Math.max(...rights)
-        const minTop = Math.min(...tops)
-        const maxBottom = Math.max(...bottoms)
+        const minLeft = Math.min(...sel.map((l) => l.x))
+        const maxRight = Math.max(...sel.map((l) => l.x + l.width))
+        const minTop = Math.min(...sel.map((l) => l.y))
+        const maxBottom = Math.max(...sel.map((l) => l.y + l.height))
         const cx = (minLeft + maxRight) / 2
         const cy = (minTop + maxBottom) / 2
         const idSet = new Set(sel.map((l) => l.id))
@@ -1124,38 +902,32 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       apply((ls) => {
         const sel = ls.filter((l) => selectedIds.includes(l.id) && !l.locked)
         if (sel.length < 3) return ls
+        const horiz = axis === "horizontal"
         const sorted = [...sel].sort((a, b) =>
-          axis === "horizontal" ? a.x - b.x : a.y - b.y
+          horiz ? a.x - b.x : a.y - b.y
         )
         const first = sorted[0]!
         const last = sorted[sorted.length - 1]!
-        if (axis === "horizontal") {
-          const totalSpan = last.x + last.width - first.x
-          const usedWidth = sorted.reduce((s, l) => s + l.width, 0)
-          const gap = (totalSpan - usedWidth) / (sorted.length - 1)
-          let cursor = first.x
-          const positions = new Map<string, number>()
-          for (const l of sorted) {
-            positions.set(l.id, Math.round(cursor))
-            cursor += l.width + gap
-          }
-          return ls.map((l) =>
-            positions.has(l.id) ? { ...l, x: positions.get(l.id)! } : l
-          )
-        } else {
-          const totalSpan = last.y + last.height - first.y
-          const usedHeight = sorted.reduce((s, l) => s + l.height, 0)
-          const gap = (totalSpan - usedHeight) / (sorted.length - 1)
-          let cursor = first.y
-          const positions = new Map<string, number>()
-          for (const l of sorted) {
-            positions.set(l.id, Math.round(cursor))
-            cursor += l.height + gap
-          }
-          return ls.map((l) =>
-            positions.has(l.id) ? { ...l, y: positions.get(l.id)! } : l
-          )
+        const startPos = horiz ? first.x : first.y
+        const endPos = horiz
+          ? last.x + last.width
+          : last.y + last.height
+        const used = sorted.reduce(
+          (s, l) => s + (horiz ? l.width : l.height),
+          0
+        )
+        const gap = (endPos - startPos - used) / (sorted.length - 1)
+        const positions = new Map<string, number>()
+        let cursor = startPos
+        for (const l of sorted) {
+          positions.set(l.id, Math.round(cursor))
+          cursor += (horiz ? l.width : l.height) + gap
         }
+        return ls.map((l) => {
+          const p = positions.get(l.id)
+          if (p === undefined) return l
+          return horiz ? { ...l, x: p } : { ...l, y: p }
+        })
       })
     },
     [apply, selectedIds]
@@ -1180,14 +952,188 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     setDoc({ layers: [], past: [], future: [] })
     setDocSettingsState(DEFAULT_DOC_SETTINGS)
     setSelectedIds([])
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.removeItem(STORAGE_KEY)
-      } catch {
-        /* ignore */
-      }
+    clearPersistedDoc()
+  }, [])
+
+  // ---- Tabs ----
+
+  const captureSnapshot = useCallback((): TabSnapshot => {
+    return {
+      layers: doc.layers,
+      past: doc.past,
+      future: doc.future,
+      selectedIds,
+      docSettings,
+      zoom,
+      panX,
+      panY,
+    }
+  }, [doc, selectedIds, docSettings, zoom, panX, panY])
+
+  const applySnapshot = useCallback((snap: TabSnapshot | undefined) => {
+    if (snap) {
+      setDoc({ layers: snap.layers, past: snap.past, future: snap.future })
+      setSelectedIds(snap.selectedIds)
+      setDocSettingsState(snap.docSettings)
+      setZoomState(snap.zoom)
+      setPanX(snap.panX)
+      setPanY(snap.panY)
+    } else {
+      setDoc({ layers: [], past: [], future: [] })
+      setSelectedIds([])
+      setDocSettingsState(DEFAULT_DOC_SETTINGS)
+      setZoomState(75)
+      setPanX(0)
+      setPanY(0)
     }
   }, [])
+
+  const filename = useMemo(() => {
+    if (!activeTabId) return "Untitled"
+    return tabs.find((t) => t.id === activeTabId)?.name ?? "Untitled"
+  }, [tabs, activeTabId])
+
+  const setFilename = useCallback(
+    (name: string) => {
+      if (!activeTabId) return
+      setTabs((prev) =>
+        prev.map((t) => (t.id === activeTabId ? { ...t, name } : t))
+      )
+    },
+    [activeTabId]
+  )
+
+  const newTab = useCallback(
+    (opts?: {
+      name?: string
+      layers?: Layer[]
+      docSettings?: Partial<DocSettings>
+    }) => {
+      // Snapshot current active tab before swapping.
+      if (activeTabId) {
+        tabSnapshotsRef.current.set(activeTabId, captureSnapshot())
+      }
+      const id = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const name = opts?.name ?? "Untitled"
+      setTabs((prev) => [...prev, { id, name }])
+      setActiveTabId(id)
+      // Reset live state to the new tab's contents.
+      setDoc({ layers: opts?.layers ?? [], past: [], future: [] })
+      setSelectedIds([])
+      setDocSettingsState({
+        ...DEFAULT_DOC_SETTINGS,
+        ...(opts?.docSettings ?? {}),
+      })
+      setZoomState(75)
+      setPanX(0)
+      setPanY(0)
+      return id
+    },
+    [activeTabId, captureSnapshot]
+  )
+
+  const switchTab = useCallback(
+    (id: string) => {
+      if (id === activeTabId) return
+      if (activeTabId) {
+        tabSnapshotsRef.current.set(activeTabId, captureSnapshot())
+      }
+      const snap = tabSnapshotsRef.current.get(id)
+      applySnapshot(snap)
+      setActiveTabId(id)
+    },
+    [activeTabId, captureSnapshot, applySnapshot]
+  )
+
+  const closeTab = useCallback(
+    (id: string) => {
+      setTabs((prev) => {
+        const idx = prev.findIndex((t) => t.id === id)
+        if (idx < 0) return prev
+        const next = prev.filter((t) => t.id !== id)
+        if (id === activeTabId) {
+          // Pick a neighbor to activate. Prefer the one to the right.
+          const neighbor = next[idx] ?? next[idx - 1] ?? null
+          if (neighbor) {
+            const snap = tabSnapshotsRef.current.get(neighbor.id)
+            applySnapshot(snap)
+            setActiveTabId(neighbor.id)
+          } else {
+            applySnapshot(undefined)
+            setActiveTabId(null)
+          }
+        }
+        tabSnapshotsRef.current.delete(id)
+        return next
+      })
+    },
+    [activeTabId, applySnapshot]
+  )
+
+  const renameTab = useCallback((id: string, name: string) => {
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, name } : t)))
+  }, [])
+
+  /** Open an image file as its own tab — the doc is sized to the image's
+   *  natural pixel dimensions and the image fills the canvas exactly. This
+   *  is the Photoshop/Photopea "open as new document" flow and avoids the
+   *  downscale → soft export problem entirely. If the active tab is empty
+   *  (welcome state), replaces its content instead of stacking a new tab. */
+  const openImageInNewTab = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith("image/")) return null
+      const src = URL.createObjectURL(file)
+      const img = await loadImage(src)
+      const w = img.naturalWidth
+      const h = img.naturalHeight
+      const id = `img-${Date.now()}`
+      const baseName = file.name.replace(/\.[^.]+$/, "") || "Image"
+      const layer: Layer = {
+        id,
+        name: baseName,
+        kind: "image",
+        visible: true,
+        locked: false,
+        opacity: 100,
+        blendMode: "normal",
+        x: 0,
+        y: 0,
+        width: w,
+        height: h,
+        rotation: 0,
+        src,
+      }
+      // If the active tab is currently empty (welcome state), absorb the
+      // image into it rather than spawning yet another tab.
+      if (activeTabId && doc.layers.length === 0) {
+        setDoc({ layers: [layer], past: [], future: [] })
+        setDocSettingsState({
+          ...DEFAULT_DOC_SETTINGS,
+          width: w,
+          height: h,
+          background: "transparent",
+        })
+        setSelectedIds([id])
+        setZoomState(75)
+        setPanX(0)
+        setPanY(0)
+        setTabs((prev) =>
+          prev.map((t) => (t.id === activeTabId ? { ...t, name: baseName } : t))
+        )
+        return id
+      }
+      newTab({
+        name: baseName,
+        layers: [layer],
+        docSettings: { width: w, height: h, background: "transparent" },
+      })
+      // newTab resets selection — re-select the image so it's immediately
+      // editable.
+      setSelectedIds([id])
+      return id
+    },
+    [newTab, activeTabId, doc.layers]
+  )
 
   const setPref = useCallback(
     <K extends keyof Prefs>(k: K, v: Prefs[K]) => {
@@ -1230,11 +1176,9 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
           height: maxY - minY,
           rotation: 0,
         }
-        const firstIdx = ls.findIndex((l) => childSet.has(l.id))
         const next: Layer[] = []
         let inserted = false
-        for (let i = 0; i < ls.length; i++) {
-          const l = ls[i]!
+        for (const l of ls) {
           if (childSet.has(l.id)) {
             if (!inserted) {
               next.push(group)
@@ -1245,7 +1189,6 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
             next.push(l)
           }
         }
-        if (!inserted) next.splice(firstIdx, 0, group)
         return next
       })
       setSelectedIds([groupId])
@@ -1259,10 +1202,11 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       apply((ls) => {
         const idx = ls.findIndex((l) => l.id === groupId)
         if (idx < 0 || ls[idx]!.kind !== "group") return ls
-        const next = ls
+        return ls
           .filter((l) => l.id !== groupId)
-          .map((l) => (l.parentId === groupId ? { ...l, parentId: undefined } : l))
-        return next
+          .map((l) =>
+            l.parentId === groupId ? { ...l, parentId: undefined } : l
+          )
       })
       setSelectedIds((cur) => cur.filter((id) => id !== groupId))
     },
@@ -1346,6 +1290,15 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       setDocSettings,
       replaceDoc,
       resetDoc,
+      tabs,
+      activeTabId,
+      filename,
+      setFilename,
+      newTab,
+      switchTab,
+      closeTab,
+      renameTab,
+      openImageInNewTab,
       prefs,
       setPref,
       viewToggles,
@@ -1393,17 +1346,11 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       alignSelection,
       distributeSelection,
       shapeVariant,
-      setShapeVariant,
       brushSize,
-      setBrushSize,
       brushColor,
-      setBrushColor,
       brushHardness,
-      setBrushHardness,
       wandTolerance,
-      setWandTolerance,
       pixelMask,
-      setPixelMask,
       eraseUnderMask,
       setZoom,
       setPan,
@@ -1416,6 +1363,15 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       setDocSettings,
       replaceDoc,
       resetDoc,
+      tabs,
+      activeTabId,
+      filename,
+      setFilename,
+      newTab,
+      switchTab,
+      closeTab,
+      renameTab,
+      openImageInNewTab,
       prefs,
       setPref,
       viewToggles,

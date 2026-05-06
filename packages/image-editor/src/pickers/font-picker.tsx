@@ -23,7 +23,7 @@ import {
   isFontLoaded,
   SYSTEM_FONT,
   type FontDef,
-} from "./fonts"
+} from "../pickers/fonts"
 
 type Category = FontDef["category"] | "system"
 

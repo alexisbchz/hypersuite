@@ -1,5 +1,5 @@
 import type { Layer } from "./types"
-import { ensureFont, fontStack } from "./fonts"
+import { ensureFont, fontStack } from "../pickers/fonts"
 
 export type ExportFormat = "png" | "jpeg" | "webp" | "svg"
 
@@ -25,12 +25,26 @@ type ExportContext = {
   /** Document dimensions. Falls back to 1200×800 if omitted. */
   width?: number
   height?: number
+  /** Output pixel multiplier (e.g. 2 on a Retina display). Defaults to
+   *  the device pixel ratio, capped at 3 for memory sanity. The composition
+   *  draws in doc-coords; the underlying canvas is allocated at
+   *  width*pr × height*pr. */
+  pixelRatio?: number
   /** resolves CSS variable / oklch references to a concrete CSS color string */
   resolveColor?: (raw: string) => string
   /** Resolved URL for the legacy demo "photo" layer (which has no `src`).
    *  Caller must pass this — Next.js static-import paths are hashed and
    *  unavailable from a static literal. */
   photoUrl?: string
+  /** Live offscreen canvases for raster (brush/pencil/eraser) layers. When
+   *  provided, raster layers draw straight from the canvas instead of
+   *  re-decoding the PNG dataURL — preserves stroke fidelity. */
+  getRasterCanvas?: (id: string) => HTMLCanvasElement
+}
+
+function defaultPixelRatio(): number {
+  if (typeof window === "undefined") return 1
+  return Math.min(Math.max(1, window.devicePixelRatio || 1), 3)
 }
 
 export async function exportComposition(ctx: ExportContext) {
@@ -51,7 +65,8 @@ function exportCacheKey(ctx: ExportContext): string {
   // Skip blob: URLs since they survive only this session anyway.
   const w = ctx.width ?? DEFAULT_DOC_W
   const h = ctx.height ?? DEFAULT_DOC_H
-  return `${ctx.format}::${w}x${h}::${JSON.stringify(ctx.layers)}`
+  const pr = ctx.pixelRatio ?? defaultPixelRatio()
+  return `${ctx.format}::${w}x${h}@${pr}::${JSON.stringify(ctx.layers)}`
 }
 
 export async function exportToBlob(ctx: ExportContext): Promise<Blob> {
@@ -73,11 +88,14 @@ async function renderRaster({
   format,
   width,
   height,
+  pixelRatio,
   resolveColor,
   photoUrl,
+  getRasterCanvas,
 }: ExportContext): Promise<Blob> {
   const docW = width ?? DEFAULT_DOC_W
   const docH = height ?? DEFAULT_DOC_H
+  const pr = pixelRatio ?? defaultPixelRatio()
   // Smart preload: ensure every Google Font referenced by a text layer is
   // loaded before drawing, otherwise canvas falls back to system UI.
   const families = new Set<string>()
@@ -87,11 +105,13 @@ async function renderRaster({
   await Promise.all([...families].map((f) => ensureFont(f)))
 
   const canvas = document.createElement("canvas")
-  canvas.width = docW
-  canvas.height = docH
+  canvas.width = Math.max(1, Math.round(docW * pr))
+  canvas.height = Math.max(1, Math.round(docH * pr))
   const ctx = canvas.getContext("2d")!
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = "high"
+  // Draw everything in doc-coords; the canvas backs at higher density.
+  ctx.scale(pr, pr)
 
   if (format === "jpeg") {
     ctx.fillStyle = resolveColor?.("var(--color-background)") ?? "#ffffff"
@@ -120,13 +140,18 @@ async function renderRaster({
       filterParts.push(`saturate(${1 + adj.saturation / 100})`)
     if (adj?.hue) filterParts.push(`hue-rotate(${adj.hue}deg)`)
     if (fx.blur) filterParts.push(`blur(${fx.blur}px)`)
-    if (fx.shadow) {
-      const c = resolveColor?.(fx.shadow.color) ?? fx.shadow.color
-      filterParts.push(
-        `drop-shadow(${fx.shadow.x}px ${fx.shadow.y}px ${fx.shadow.blur}px ${c})`
-      )
-    }
     if (filterParts.length) ctx.filter = filterParts.join(" ")
+    // Drop-shadow runs through native canvas shadow APIs rather than
+    // ctx.filter — the filter pipeline rasterizes layers softer than
+    // CSS drop-shadow does in the editor. shadow* are in canvas pixels
+    // and ignore the current transform, so we multiply by pr to match
+    // doc-coords once the canvas is upscaled.
+    if (fx.shadow) {
+      ctx.shadowColor = resolveColor?.(fx.shadow.color) ?? fx.shadow.color
+      ctx.shadowOffsetX = fx.shadow.x * pr
+      ctx.shadowOffsetY = fx.shadow.y * pr
+      ctx.shadowBlur = fx.shadow.blur * pr
+    }
 
     if (l.crop) {
       ctx.beginPath()
@@ -153,12 +178,19 @@ async function renderRaster({
       ctx.font = `${weight} ${size}px ${fontStack(l.fontFamily)}`
       ctx.textBaseline = "middle"
       ctx.fillText(content, 0, l.height / 2)
-    } else if (l.kind === "raster" && l.rasterDataUrl) {
-      try {
-        const img = await loadImage(l.rasterDataUrl)
-        ctx.drawImage(img, 0, 0, l.width, l.height)
-      } catch {
-        // skip
+    } else if (l.kind === "raster") {
+      // Prefer drawing from the live offscreen canvas when the caller
+      // provides one; falling back to the dataURL avoids a PNG round-trip.
+      const rc = getRasterCanvas?.(l.id)
+      if (rc && rc.width > 0 && rc.height > 0) {
+        drawDownscaled(ctx, rc, 0, 0, rc.width, rc.height, 0, 0, l.width, l.height)
+      } else if (l.rasterDataUrl) {
+        try {
+          const img = await loadImage(l.rasterDataUrl)
+          ctx.drawImage(img, 0, 0, l.width, l.height)
+        } catch {
+          // skip
+        }
       }
     } else if (l.kind === "path" && l.path) {
       const p = new Path2D(l.path)
@@ -192,6 +224,14 @@ async function renderRaster({
       ctx.fill()
     }
 
+    // Clear the layer-level drop-shadow before stroke / innerShadow so they
+    // don't inherit it. (innerShadow still uses ctx.save/restore inside its
+    // own block, so this is mostly defensive.)
+    ctx.shadowColor = "rgba(0,0,0,0)"
+    ctx.shadowBlur = 0
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 0
+
     if (fx.stroke && fx.stroke.width > 0) {
       ctx.filter = "none"
       ctx.strokeStyle = resolveColor?.(fx.stroke.color) ?? fx.stroke.color
@@ -207,9 +247,9 @@ async function renderRaster({
       ctx.clip()
       const c = resolveColor?.(fx.innerShadow.color) ?? fx.innerShadow.color
       ctx.shadowColor = c
-      ctx.shadowBlur = fx.innerShadow.blur
-      ctx.shadowOffsetX = -fx.innerShadow.x
-      ctx.shadowOffsetY = -fx.innerShadow.y
+      ctx.shadowBlur = fx.innerShadow.blur * pr
+      ctx.shadowOffsetX = -fx.innerShadow.x * pr
+      ctx.shadowOffsetY = -fx.innerShadow.y * pr
       ctx.lineWidth = Math.max(2, fx.innerShadow.blur)
       ctx.strokeStyle = "rgba(0,0,0,0)"
       ctx.strokeRect(
@@ -365,7 +405,10 @@ function drawDownscaled(
   dw: number,
   dh: number,
 ) {
-  if (sw <= dw * 2 && sh <= dh * 2) {
+  // For moderate downscales the browser's native bicubic in a single
+  // drawImage produces sharper results than progressive halving through
+  // intermediate canvases. Only fall back to halving for >3× shrinks.
+  if (sw <= dw * 3 && sh <= dh * 3) {
     ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh)
     return
   }

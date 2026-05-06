@@ -24,8 +24,8 @@ import {
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
-import { useEditor } from "./editor-context"
-import type { ToolId } from "./types"
+import { useEditor } from "../editor"
+import type { ToolId } from "../lib/types"
 
 type Tool = {
   id: ToolId

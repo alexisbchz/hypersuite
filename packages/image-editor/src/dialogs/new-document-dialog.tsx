@@ -15,8 +15,9 @@ import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
 import { cn } from "@workspace/ui/lib/utils"
 
-import { DEFAULT_DOC_SETTINGS, useEditor } from "./editor-context"
-import type { Layer } from "./types"
+import { useEditor } from "../editor"
+import { DEFAULT_DOC_SETTINGS } from "../editor/doc"
+import type { Layer } from "../lib/types"
 
 const PRESETS: Array<{ label: string; w: number; h: number }> = [
   { label: "Square 1080", w: 1080, h: 1080 },
@@ -28,13 +29,11 @@ const PRESETS: Array<{ label: string; w: number; h: number }> = [
 export function NewDocumentDialog({
   open,
   onOpenChange,
-  onCreated,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreated?: () => void
 }) {
-  const { replaceDoc } = useEditor()
+  const { newTab } = useEditor()
   const [width, setWidth] = useState(DEFAULT_DOC_SETTINGS.width)
   const [height, setHeight] = useState(DEFAULT_DOC_SETTINGS.height)
   const [background, setBackground] = useState(DEFAULT_DOC_SETTINGS.background)
@@ -62,8 +61,11 @@ export function NewDocumentDialog({
       rotation: 0,
       color: background,
     }
-    replaceDoc([bg], { width, height, background })
-    onCreated?.()
+    newTab({
+      name: "Untitled",
+      layers: [bg],
+      docSettings: { width, height, background },
+    })
     onOpenChange(false)
   }
 
@@ -73,8 +75,7 @@ export function NewDocumentDialog({
         <DialogHeader>
           <DialogTitle>New document</DialogTitle>
           <DialogDescription>
-            Pick a preset or enter custom dimensions. This replaces the current
-            document.
+            Pick a preset or enter custom dimensions. Opens in a new tab.
           </DialogDescription>
         </DialogHeader>
 

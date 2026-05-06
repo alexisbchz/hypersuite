@@ -1,8 +1,110 @@
-import type { Layer } from "./types"
+import type { Anchor, Layer } from "./types"
 
 export type Rect = { x: number; y: number; width: number; height: number }
 export type Vec2 = { x: number; y: number }
 export type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w"
+
+// ---------------------------------------------------------- Anchor paths --
+
+/** Render anchors as an SVG `d` string, optionally closed, in the local frame
+ *  defined by `origin` (typically the layer's top-left). */
+export function anchorsToSvgD(
+  anchors: Anchor[],
+  closed: boolean,
+  origin: Vec2
+) {
+  if (!anchors.length) return ""
+  const { x: ox, y: oy } = origin
+  const segs: string[] = []
+  for (let i = 0; i < anchors.length; i++) {
+    const a = anchors[i]!
+    if (i === 0) {
+      segs.push(`M${a.x - ox} ${a.y - oy}`)
+      continue
+    }
+    const prev = anchors[i - 1]!
+    const c1 = prev.hOut
+    const c2 = a.hIn
+    if (c1 || c2) {
+      const cp1 = c1 ?? { x: prev.x, y: prev.y }
+      const cp2 = c2 ?? { x: a.x, y: a.y }
+      segs.push(
+        `C${cp1.x - ox} ${cp1.y - oy} ${cp2.x - ox} ${cp2.y - oy} ${a.x - ox} ${a.y - oy}`
+      )
+    } else {
+      segs.push(`L${a.x - ox} ${a.y - oy}`)
+    }
+  }
+  if (closed && anchors.length >= 2) {
+    const first = anchors[0]!
+    const last = anchors[anchors.length - 1]!
+    const c1 = last.hOut
+    const c2 = first.hIn
+    if (c1 || c2) {
+      const cp1 = c1 ?? { x: last.x, y: last.y }
+      const cp2 = c2 ?? { x: first.x, y: first.y }
+      segs.push(
+        `C${cp1.x - ox} ${cp1.y - oy} ${cp2.x - ox} ${cp2.y - oy} ${first.x - ox} ${first.y - oy}`
+      )
+    }
+    segs.push("Z")
+  }
+  return segs.join(" ")
+}
+
+/** Tight AABB around all anchor points and their bezier handles, padded by
+ *  `pad` on each side. Coordinates are integer-rounded. */
+export function pathBoundsFromAnchors(anchors: Anchor[], pad: number): Rect {
+  const xs: number[] = []
+  const ys: number[] = []
+  for (const a of anchors) {
+    xs.push(a.x)
+    ys.push(a.y)
+    if (a.hIn) {
+      xs.push(a.hIn.x)
+      ys.push(a.hIn.y)
+    }
+    if (a.hOut) {
+      xs.push(a.hOut.x)
+      ys.push(a.hOut.y)
+    }
+  }
+  const minX = Math.min(...xs)
+  const minY = Math.min(...ys)
+  const maxX = Math.max(...xs)
+  const maxY = Math.max(...ys)
+  return {
+    x: Math.floor(minX - pad),
+    y: Math.floor(minY - pad),
+    width: Math.ceil(maxX - minX + pad * 2),
+    height: Math.ceil(maxY - minY + pad * 2),
+  }
+}
+
+/** Like `pathBoundsFromAnchors` but unioned with an existing rect (used when
+ *  re-laying-out a path layer to grow but never shrink unexpectedly). */
+export function pathBoundsUnion(
+  anchors: Anchor[],
+  existing: Rect,
+  pad: number
+): Rect {
+  const xs: number[] = [existing.x, existing.x + existing.width]
+  const ys: number[] = [existing.y, existing.y + existing.height]
+  for (const a of anchors) {
+    xs.push(a.x, a.hIn?.x ?? a.x, a.hOut?.x ?? a.x)
+    ys.push(a.y, a.hIn?.y ?? a.y, a.hOut?.y ?? a.y)
+  }
+  const minX = Math.min(...xs)
+  const minY = Math.min(...ys)
+  const maxX = Math.max(...xs)
+  const maxY = Math.max(...ys)
+  return {
+    x: Math.floor(minX - pad),
+    y: Math.floor(minY - pad),
+    width: Math.ceil(maxX - minX + pad * 2),
+    height: Math.ceil(maxY - minY + pad * 2),
+  }
+}
 
 export function rotateVec(v: Vec2, rotationDeg: number): Vec2 {
   const r = (rotationDeg * Math.PI) / 180

@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@workspace/ui/components/dialog"
 
-import { SHORTCUTS } from "./keyboard-shortcuts"
+import { SHORTCUTS } from "../keyboard-shortcuts"
 
 export function ShortcutsDialog({
   open,
