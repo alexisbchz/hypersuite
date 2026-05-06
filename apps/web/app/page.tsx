@@ -1,3 +1,4 @@
+import audioIllustration from "./audio/illustration.webp"
 import imageIllustration from "./image/illustration.webp"
 import { LogoMenu } from "./logo-menu"
 import {
@@ -19,12 +20,18 @@ const products: Product[] = [
     description: "Edit images right in your browser.",
     illustration: imageIllustration,
   },
+  {
+    href: "/audio",
+    title: "Audio",
+    description: "Generate and edit audio with AI.",
+    illustration: audioIllustration,
+  },
 ]
 
 export default function Page() {
   return (
     <div className="flex min-h-svh p-8">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
+      <div className="flex max-w-3xl min-w-0 flex-col gap-4 text-sm leading-loose">
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
@@ -54,7 +61,7 @@ export default function Page() {
           </a>
         </div>
 
-        <div className="mt-4 flex flex-col gap-6">
+        <div className="mt-4 flex flex-wrap gap-6 sm:gap-12">
           {products.map((product) => (
             <ProductCard key={product.href} product={product} />
           ))}

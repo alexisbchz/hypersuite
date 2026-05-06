@@ -1,4 +1,54 @@
-export type LayerKind = "image" | "text" | "shape" | "group"
+export type LayerKind = "image" | "text" | "shape" | "group" | "path" | "raster"
+
+export type ShadowEffect = {
+  x: number
+  y: number
+  blur: number
+  color: string
+}
+
+export type StrokeEffect = {
+  width: number
+  color: string
+}
+
+export type LayerEffects = {
+  shadow?: ShadowEffect | null
+  innerShadow?: ShadowEffect | null
+  blur?: number | null
+  stroke?: StrokeEffect | null
+}
+
+export type ShapeVariant = "rect" | "ellipse"
+
+export type Crop = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type Anchor = {
+  x: number
+  y: number
+  /** outgoing handle in absolute doc coords; undefined = corner */
+  hOut?: { x: number; y: number }
+  /** incoming handle (mirror of hOut by default) */
+  hIn?: { x: number; y: number }
+}
+
+export type ImageAdjustments = {
+  brightness?: number
+  contrast?: number
+  saturation?: number
+  hue?: number
+}
+
+export type LayerFilters = {
+  sharpen?: { strength: number }
+  noise?: { amount: number; mono: boolean }
+  grain?: { amount: number; scale: number }
+}
 
 export type Layer = {
   id: string
@@ -15,6 +65,34 @@ export type Layer = {
   rotation: number
   color?: string
   src?: string
+  text?: string
+  fontSize?: number
+  fontWeight?: number
+  /** Google Font family name, or undefined for system UI. */
+  fontFamily?: string
+  effects?: LayerEffects
+  /** Image adjustments (brightness/contrast/saturation/hue) for image and raster layers. */
+  adjustments?: ImageAdjustments
+  /** Filters (sharpen/noise/grain) for any layer. */
+  filters?: LayerFilters
+  shape?: ShapeVariant
+  path?: string
+  pathClosed?: boolean
+  pathStrokeWidth?: number
+  /** Anchors in absolute doc coordinates (preferred over `path` for editable paths). */
+  anchors?: Anchor[]
+  /** Stored as a PNG data URL, or null while empty. */
+  rasterDataUrl?: string | null
+  /** Pixel dimensions of the raster buffer (separate from layer size for resampling). */
+  rasterWidth?: number
+  rasterHeight?: number
+  /** Source-pixel crop for image layers (in source-image coordinates). */
+  crop?: Crop | null
+  /** Original image natural dimensions (used for crop math). */
+  naturalWidth?: number
+  naturalHeight?: number
+  /** Group membership — undefined or missing means top-level. */
+  parentId?: string
 }
 
 export type ToolId =

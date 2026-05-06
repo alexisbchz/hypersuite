@@ -3,6 +3,15 @@
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   AdjustPositionIcon,
+  AlignBottomIcon,
+  AlignHorizontalCenterIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
+  AlignTopIcon,
+  AlignVerticalCenterIcon,
+  DistributeHorizontalCenterIcon,
+  DistributeVerticalCenterIcon,
+  MagicWand01Icon,
   PaintBucketIcon,
   Rotate01Icon,
   Settings02Icon,
@@ -10,8 +19,15 @@ import {
 
 import { Input } from "@workspace/ui/components/input"
 import { Switch } from "@workspace/ui/components/switch"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@workspace/ui/components/tooltip"
+import { cn } from "@workspace/ui/lib/utils"
+import { ColorPicker } from "./color-picker"
+import { FontPicker } from "./font-picker"
 import { useEditor } from "./editor-context"
-import type { Layer } from "./types"
 
 const BLEND_MODES = [
   "normal",
@@ -33,20 +49,250 @@ const BLEND_MODES = [
 ] as const
 
 export function PropertiesPanel() {
-  const { layers, selectedId, patch, rename } = useEditor()
+  const {
+    layers,
+    selectedId,
+    selectedIds,
+    patch,
+    setProp,
+    commit,
+    rename,
+    alignSelection,
+    distributeSelection,
+    tool,
+    shapeVariant,
+    setShapeVariant,
+    brushSize,
+    setBrushSize,
+    brushColor,
+    setBrushColor,
+    brushHardness,
+    setBrushHardness,
+    wandTolerance,
+    setWandTolerance,
+    pixelMask,
+    eraseUnderMask,
+    setPixelMask,
+  } = useEditor()
   const layer = layers.find((l) => l.id === selectedId) ?? null
 
-  if (!layer) {
+  // Show tool settings panel for tools that have settings even when nothing is selected
+  if (
+    !layer ||
+    tool === "shape" ||
+    tool === "pencil" ||
+    tool === "brush" ||
+    tool === "eraser" ||
+    tool === "pen" ||
+    tool === "wand"
+  ) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-10 text-center">
-        <div className="flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
-          <HugeiconsIcon icon={Settings02Icon} className="size-4" />
+      <div className="flex h-full flex-col">
+        <div className="border-b border-border px-3 py-2">
+          <p className="px-1 text-xs font-medium text-foreground capitalize">
+            {tool} tool
+          </p>
+          <p className="px-1 text-[11px] text-muted-foreground">
+            {layer ? `Editing ${layer.name}` : "No selection"}
+          </p>
         </div>
-        <p className="text-xs font-medium text-foreground">No selection</p>
-        <p className="text-xs text-muted-foreground">
-          Select a layer in the canvas or in the layers panel to edit its
-          properties.
-        </p>
+        {tool === "shape" && (
+          <Section title="Shape" icon={PaintBucketIcon}>
+            <Row label="Variant">
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setShapeVariant("rect")}
+                  className={cn(
+                    "h-7 flex-1 rounded-md border border-border text-xs",
+                    shapeVariant === "rect"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background hover:bg-muted"
+                  )}
+                >
+                  Rectangle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShapeVariant("ellipse")}
+                  className={cn(
+                    "h-7 flex-1 rounded-md border border-border text-xs",
+                    shapeVariant === "ellipse"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background hover:bg-muted"
+                  )}
+                >
+                  Ellipse
+                </button>
+              </div>
+            </Row>
+            <Row label="Fill">
+              <ColorField value={brushColor} onChange={setBrushColor} />
+            </Row>
+          </Section>
+        )}
+        {(tool === "pencil" || tool === "brush" || tool === "eraser") && (
+          <Section title={tool === "eraser" ? "Eraser" : "Brush"} icon={PaintBucketIcon}>
+            <Row label="Size">
+              <input
+                type="range"
+                min={1}
+                max={120}
+                value={brushSize}
+                onChange={(e) => setBrushSize(Number(e.target.value))}
+                className="w-full"
+              />
+            </Row>
+            <Row label="Hardness">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={brushHardness}
+                onChange={(e) => setBrushHardness(Number(e.target.value))}
+                className="w-full"
+              />
+            </Row>
+            {tool !== "eraser" && (
+              <Row label="Color">
+                <ColorField value={brushColor} onChange={setBrushColor} />
+              </Row>
+            )}
+            <p className="px-1 text-[11px] text-muted-foreground">
+              {tool === "eraser"
+                ? "Erases from the selected raster layer."
+                : "Strokes paint on a raster layer (created on first stroke)."}
+            </p>
+          </Section>
+        )}
+        {tool === "pen" && (
+          <Section title="Pen" icon={PaintBucketIcon}>
+            <Row label="Color">
+              <ColorField value={brushColor} onChange={setBrushColor} />
+            </Row>
+            <p className="px-1 text-[11px] text-muted-foreground">
+              Click to add a corner anchor. Drag while clicking to set a
+              smooth bezier handle. Click the first anchor to close, Enter
+              for open path, Esc to cancel. Select a path to drag its
+              anchors / handles.
+            </p>
+          </Section>
+        )}
+        {tool === "wand" && (
+          <Section title="Magic wand" icon={PaintBucketIcon}>
+            <Row label="Tolerance">
+              <input
+                type="range"
+                min={0}
+                max={128}
+                value={wandTolerance}
+                onChange={(e) => setWandTolerance(Number(e.target.value))}
+                className="w-full"
+              />
+            </Row>
+            <p className="px-1 text-[11px] text-muted-foreground">
+              {pixelMask
+                ? "Mask active. Apply it to the active raster layer to erase."
+                : "Click on the canvas to flood-fill a selection mask."}
+            </p>
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  void eraseUnderMask()
+                }}
+                disabled={!pixelMask}
+                className={cn(
+                  "h-7 w-full rounded-md border border-border text-xs",
+                  pixelMask
+                    ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    : "pointer-events-none opacity-40"
+                )}
+              >
+                Erase masked pixels
+              </button>
+              <button
+                type="button"
+                onClick={() => setPixelMask(null)}
+                disabled={!pixelMask}
+                className={cn(
+                  "h-7 w-full rounded-md border border-border text-xs hover:bg-muted",
+                  !pixelMask && "pointer-events-none opacity-40"
+                )}
+              >
+                Clear mask
+              </button>
+            </div>
+          </Section>
+        )}
+      </div>
+    )
+  }
+
+  const multi = selectedIds.length > 1
+
+  if (multi) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="border-b border-border px-3 py-2">
+          <p className="px-1 text-xs font-medium text-foreground">
+            {selectedIds.length} layers selected
+          </p>
+          <p className="px-1 text-[11px] text-muted-foreground">
+            Align or distribute the selection
+          </p>
+        </div>
+        <Section title="Align" icon={AdjustPositionIcon}>
+          <div className="grid grid-cols-6 gap-1">
+            <AlignBtn
+              tip="Align left"
+              icon={AlignLeftIcon}
+              onClick={() => alignSelection("left")}
+            />
+            <AlignBtn
+              tip="Align center"
+              icon={AlignHorizontalCenterIcon}
+              onClick={() => alignSelection("centerX")}
+            />
+            <AlignBtn
+              tip="Align right"
+              icon={AlignRightIcon}
+              onClick={() => alignSelection("right")}
+            />
+            <AlignBtn
+              tip="Align top"
+              icon={AlignTopIcon}
+              onClick={() => alignSelection("top")}
+            />
+            <AlignBtn
+              tip="Align middle"
+              icon={AlignVerticalCenterIcon}
+              onClick={() => alignSelection("centerY")}
+            />
+            <AlignBtn
+              tip="Align bottom"
+              icon={AlignBottomIcon}
+              onClick={() => alignSelection("bottom")}
+            />
+          </div>
+        </Section>
+        <Section title="Distribute" icon={AdjustPositionIcon}>
+          <div className="grid grid-cols-6 gap-1">
+            <AlignBtn
+              tip="Distribute horizontally"
+              icon={DistributeHorizontalCenterIcon}
+              onClick={() => distributeSelection("horizontal")}
+              disabled={selectedIds.length < 3}
+            />
+            <AlignBtn
+              tip="Distribute vertically"
+              icon={DistributeVerticalCenterIcon}
+              onClick={() => distributeSelection("vertical")}
+              disabled={selectedIds.length < 3}
+            />
+          </div>
+        </Section>
       </div>
     )
   }
@@ -79,32 +325,106 @@ export function PropertiesPanel() {
       <div className="flex flex-col">
         <Section title="Transform" icon={AdjustPositionIcon}>
           <div className="grid grid-cols-2 gap-2">
-            <NumField label="X" value={layer.x} onChange={(v) => patch(layer.id, { x: v })} />
-            <NumField label="Y" value={layer.y} onChange={(v) => patch(layer.id, { y: v })} />
-            <NumField label="W" value={layer.width} onChange={(v) => patch(layer.id, { width: v })} />
-            <NumField label="H" value={layer.height} onChange={(v) => patch(layer.id, { height: v })} />
+            <NumField
+              label="X"
+              value={layer.x}
+              onFocus={commit}
+              onChange={(v) => patch(layer.id, { x: v })}
+            />
+            <NumField
+              label="Y"
+              value={layer.y}
+              onFocus={commit}
+              onChange={(v) => patch(layer.id, { y: v })}
+            />
+            <NumField
+              label="W"
+              value={layer.width}
+              onFocus={commit}
+              onChange={(v) => patch(layer.id, { width: Math.max(1, v) })}
+            />
+            <NumField
+              label="H"
+              value={layer.height}
+              onFocus={commit}
+              onChange={(v) => patch(layer.id, { height: Math.max(1, v) })}
+            />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <NumField
               label={<HugeiconsIcon icon={Rotate01Icon} className="size-3" />}
               value={layer.rotation}
+              onFocus={commit}
               onChange={(v) => patch(layer.id, { rotation: v })}
               suffix="°"
             />
             <NumField
               label="Op"
               value={layer.opacity}
-              onChange={(v) => patch(layer.id, { opacity: clamp(v, 0, 100) })}
+              onFocus={commit}
+              onChange={(v) =>
+                patch(layer.id, { opacity: clamp(v, 0, 100) })
+              }
               suffix="%"
             />
           </div>
         </Section>
 
+        {layer.kind === "text" && (
+          <Section title="Text" icon={PaintBucketIcon}>
+            <Row label="Content">
+              <Input
+                key={`txt-${layer.id}`}
+                defaultValue={
+                  layer.text ?? (layer.id === "title" ? "Hypersuite" : layer.name)
+                }
+                onFocus={commit}
+                onChange={(e) =>
+                  patch(layer.id, { text: e.currentTarget.value })
+                }
+                className="h-7 w-full text-xs"
+              />
+            </Row>
+            <Row label="Font">
+              <FontPicker
+                value={layer.fontFamily}
+                onChange={(family) => {
+                  commit()
+                  patch(layer.id, { fontFamily: family })
+                }}
+              />
+            </Row>
+            <div className="grid grid-cols-2 gap-2">
+              <NumField
+                label="Sz"
+                value={layer.fontSize ?? 56}
+                onFocus={commit}
+                onChange={(v) =>
+                  patch(layer.id, { fontSize: Math.max(1, v) })
+                }
+                suffix="px"
+              />
+              <NumField
+                label="Wt"
+                value={layer.fontWeight ?? 600}
+                onFocus={commit}
+                onChange={(v) =>
+                  patch(layer.id, {
+                    fontWeight: Math.min(900, Math.max(100, v)),
+                  })
+                }
+              />
+            </div>
+          </Section>
+        )}
+
         <Section title="Appearance" icon={PaintBucketIcon}>
           <Row label="Blend mode">
             <select
               value={layer.blendMode}
-              onChange={(e) => patch(layer.id, { blendMode: e.target.value })}
+              onChange={(e) =>
+                setProp(layer.id, { blendMode: e.target.value })
+              }
               className="h-7 w-full rounded-md border border-border bg-background px-2 text-xs capitalize outline-none focus:border-ring"
             >
               {BLEND_MODES.map((m) => (
@@ -116,21 +436,322 @@ export function PropertiesPanel() {
           </Row>
           {layer.color && (
             <Row label="Fill">
-              <ColorField value={layer.color} onChange={(c) => patch(layer.id, { color: c })} />
+              <ColorField
+                value={layer.color}
+                onFocus={commit}
+                onChange={(c) => patch(layer.id, { color: c })}
+              />
             </Row>
           )}
           <Row label="Visible">
             <Switch
               checked={layer.visible}
-              onCheckedChange={(v) => patch(layer.id, { visible: v })}
+              onCheckedChange={(v) => setProp(layer.id, { visible: v })}
             />
           </Row>
           <Row label="Locked">
             <Switch
               checked={layer.locked}
-              onCheckedChange={(v) => patch(layer.id, { locked: v })}
+              onCheckedChange={(v) => setProp(layer.id, { locked: v })}
             />
           </Row>
+        </Section>
+
+        <Section title="Effects" icon={MagicWand01Icon}>
+          <Row label="Blur">
+            <NumField
+              label=""
+              value={layer.effects?.blur ?? 0}
+              onFocus={commit}
+              onChange={(v) =>
+                patch(layer.id, {
+                  effects: {
+                    ...(layer.effects ?? {}),
+                    blur: Math.max(0, v) || null,
+                  },
+                })
+              }
+              suffix="px"
+            />
+          </Row>
+          <div className="flex items-center gap-2">
+            <span className="w-16 shrink-0 text-[11px] text-muted-foreground">
+              Shadow
+            </span>
+            <Switch
+              checked={!!layer.effects?.shadow}
+              onCheckedChange={(v) =>
+                setProp(layer.id, {
+                  effects: {
+                    ...(layer.effects ?? {}),
+                    shadow: v
+                      ? layer.effects?.shadow ?? {
+                          x: 0,
+                          y: 8,
+                          blur: 16,
+                          color: "#00000080",
+                        }
+                      : null,
+                  },
+                })
+              }
+            />
+          </div>
+          {layer.effects?.shadow && (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                <NumField
+                  label="X"
+                  value={layer.effects.shadow.x}
+                  onFocus={commit}
+                  onChange={(v) =>
+                    patch(layer.id, {
+                      effects: {
+                        ...layer.effects,
+                        shadow: { ...layer.effects!.shadow!, x: v },
+                      },
+                    })
+                  }
+                />
+                <NumField
+                  label="Y"
+                  value={layer.effects.shadow.y}
+                  onFocus={commit}
+                  onChange={(v) =>
+                    patch(layer.id, {
+                      effects: {
+                        ...layer.effects,
+                        shadow: { ...layer.effects!.shadow!, y: v },
+                      },
+                    })
+                  }
+                />
+                <NumField
+                  label="B"
+                  value={layer.effects.shadow.blur}
+                  onFocus={commit}
+                  onChange={(v) =>
+                    patch(layer.id, {
+                      effects: {
+                        ...layer.effects,
+                        shadow: {
+                          ...layer.effects!.shadow!,
+                          blur: Math.max(0, v),
+                        },
+                      },
+                    })
+                  }
+                />
+              </div>
+              <Row label="Color">
+                <ColorField
+                  value={layer.effects.shadow.color}
+                  onFocus={commit}
+                  onChange={(c) =>
+                    patch(layer.id, {
+                      effects: {
+                        ...layer.effects,
+                        shadow: { ...layer.effects!.shadow!, color: c },
+                      },
+                    })
+                  }
+                />
+              </Row>
+            </>
+          )}
+          <div className="flex items-center gap-2">
+            <span className="w-16 shrink-0 text-[11px] text-muted-foreground">
+              Stroke
+            </span>
+            <Switch
+              checked={!!layer.effects?.stroke}
+              onCheckedChange={(v) =>
+                setProp(layer.id, {
+                  effects: {
+                    ...(layer.effects ?? {}),
+                    stroke: v
+                      ? layer.effects?.stroke ?? { width: 2, color: "#000000" }
+                      : null,
+                  },
+                })
+              }
+            />
+          </div>
+          {layer.effects?.stroke && (
+            <div className="grid grid-cols-2 gap-2">
+              <NumField
+                label="W"
+                value={layer.effects.stroke.width}
+                onFocus={commit}
+                onChange={(v) =>
+                  patch(layer.id, {
+                    effects: {
+                      ...layer.effects,
+                      stroke: {
+                        ...layer.effects!.stroke!,
+                        width: Math.max(0, v),
+                      },
+                    },
+                  })
+                }
+                suffix="px"
+              />
+              <ColorField
+                value={layer.effects.stroke.color}
+                onFocus={commit}
+                onChange={(c) =>
+                  patch(layer.id, {
+                    effects: {
+                      ...layer.effects,
+                      stroke: { ...layer.effects!.stroke!, color: c },
+                    },
+                  })
+                }
+              />
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <span className="w-16 shrink-0 text-[11px] text-muted-foreground">
+              Inner shadow
+            </span>
+            <Switch
+              checked={!!layer.effects?.innerShadow}
+              onCheckedChange={(v) =>
+                setProp(layer.id, {
+                  effects: {
+                    ...(layer.effects ?? {}),
+                    innerShadow: v
+                      ? layer.effects?.innerShadow ?? {
+                          x: 0,
+                          y: 4,
+                          blur: 12,
+                          color: "#00000080",
+                        }
+                      : null,
+                  },
+                })
+              }
+            />
+          </div>
+          {layer.effects?.innerShadow && (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                <NumField
+                  label="X"
+                  value={layer.effects.innerShadow.x}
+                  onFocus={commit}
+                  onChange={(v) =>
+                    patch(layer.id, {
+                      effects: {
+                        ...layer.effects,
+                        innerShadow: { ...layer.effects!.innerShadow!, x: v },
+                      },
+                    })
+                  }
+                />
+                <NumField
+                  label="Y"
+                  value={layer.effects.innerShadow.y}
+                  onFocus={commit}
+                  onChange={(v) =>
+                    patch(layer.id, {
+                      effects: {
+                        ...layer.effects,
+                        innerShadow: { ...layer.effects!.innerShadow!, y: v },
+                      },
+                    })
+                  }
+                />
+                <NumField
+                  label="B"
+                  value={layer.effects.innerShadow.blur}
+                  onFocus={commit}
+                  onChange={(v) =>
+                    patch(layer.id, {
+                      effects: {
+                        ...layer.effects,
+                        innerShadow: {
+                          ...layer.effects!.innerShadow!,
+                          blur: Math.max(0, v),
+                        },
+                      },
+                    })
+                  }
+                />
+              </div>
+              <Row label="Color">
+                <ColorField
+                  value={layer.effects.innerShadow.color}
+                  onFocus={commit}
+                  onChange={(c) =>
+                    patch(layer.id, {
+                      effects: {
+                        ...layer.effects,
+                        innerShadow: {
+                          ...layer.effects!.innerShadow!,
+                          color: c,
+                        },
+                      },
+                    })
+                  }
+                />
+              </Row>
+            </>
+          )}
+        </Section>
+
+        {(layer.kind === "image" || layer.kind === "raster") && (
+          <Section title="Adjustments" icon={MagicWand01Icon}>
+            {(
+              [
+                ["brightness", "Brightness", -100, 100, "%"],
+                ["contrast", "Contrast", -100, 100, "%"],
+                ["saturation", "Saturation", -100, 100, "%"],
+                ["hue", "Hue", -180, 180, "°"],
+              ] as const
+            ).map(([key, label, min, max, suffix]) => {
+              const val = layer.adjustments?.[key] ?? 0
+              return (
+                <Row key={key} label={label}>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={min}
+                      max={max}
+                      value={val}
+                      onPointerDown={commit}
+                      onChange={(e) =>
+                        patch(layer.id, {
+                          adjustments: {
+                            ...(layer.adjustments ?? {}),
+                            [key]: Number(e.target.value),
+                          },
+                        })
+                      }
+                      className="min-w-0 flex-1"
+                    />
+                    <span className="w-10 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
+                      {val}
+                      {suffix}
+                    </span>
+                  </div>
+                </Row>
+              )
+            })}
+            <button
+              type="button"
+              onClick={() => setProp(layer.id, { adjustments: undefined })}
+              className="mt-1 self-start rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
+            >
+              Reset adjustments
+            </button>
+          </Section>
+        )}
+
+        <Section title="Filters" icon={MagicWand01Icon}>
+          <p className="px-1 text-[11px] text-muted-foreground">
+            Sharpen, noise, and grain filters are coming soon.
+          </p>
         </Section>
       </div>
     </div>
@@ -157,10 +778,18 @@ function Section({
   )
 }
 
-function Row({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+function Row({
+  label,
+  children,
+}: {
+  label: React.ReactNode
+  children: React.ReactNode
+}) {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-16 shrink-0 text-[11px] text-muted-foreground">{label}</span>
+      <span className="w-16 shrink-0 text-[11px] text-muted-foreground">
+        {label}
+      </span>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   )
@@ -170,11 +799,13 @@ function NumField({
   label,
   value,
   onChange,
+  onFocus,
   suffix,
 }: {
   label: React.ReactNode
   value: number
   onChange: (v: number) => void
+  onFocus?: () => void
   suffix?: string
 }) {
   return (
@@ -185,11 +816,14 @@ function NumField({
       <input
         type="number"
         value={Math.round(value)}
+        onFocus={onFocus}
         onChange={(e) => onChange(Number(e.target.value))}
         className="h-7 w-full bg-transparent pe-1 text-right text-xs tabular-nums outline-none"
       />
       {suffix && (
-        <span className="pe-1.5 text-[10px] text-muted-foreground">{suffix}</span>
+        <span className="pe-1.5 text-[10px] text-muted-foreground">
+          {suffix}
+        </span>
       )}
     </label>
   )
@@ -198,35 +832,49 @@ function NumField({
 function ColorField({
   value,
   onChange,
+  onFocus,
 }: {
   value: string
   onChange: (v: string) => void
+  onFocus?: () => void
 }) {
-  const isHex = /^#[0-9a-fA-F]{6}$/.test(value)
-  return (
-    <div className="flex items-center gap-1.5 rounded-md border border-border bg-background pe-1.5 ps-1.5 focus-within:border-ring">
-      <span
-        aria-hidden
-        className="inline-block size-4 rounded ring-1 ring-border"
-        style={{ background: value }}
-      />
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-7 border-0 bg-transparent px-0 font-mono text-xs focus-visible:ring-0"
-      />
-      {isHex && (
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="size-5 cursor-pointer rounded border-0 bg-transparent p-0"
-        />
-      )}
-    </div>
-  )
+  return <ColorPicker value={value} onChange={onChange} onFocus={onFocus} />
 }
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, n))
+}
+
+function AlignBtn({
+  tip,
+  icon,
+  onClick,
+  disabled,
+}: {
+  tip: string
+  icon: typeof Settings02Icon
+  onClick: () => void
+  disabled?: boolean
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            aria-label={tip}
+            className={cn(
+              "inline-flex size-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+              disabled && "pointer-events-none opacity-40"
+            )}
+          >
+            <HugeiconsIcon icon={icon} className="size-3.5" />
+          </button>
+        }
+      />
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
+  )
 }

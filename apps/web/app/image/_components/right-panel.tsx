@@ -7,6 +7,7 @@ import {
   TabsTrigger,
 } from "@workspace/ui/components/tabs"
 import { Separator } from "@workspace/ui/components/separator"
+import { AssetsPanel } from "./assets-panel"
 import { LayersPanel } from "./layers-panel"
 import { PropertiesPanel } from "./properties-panel"
 
@@ -27,11 +28,8 @@ export function RightPanel() {
         <TabsContent value="layers" className="flex-1 overflow-hidden">
           <LayersPanel />
         </TabsContent>
-        <TabsContent
-          value="assets"
-          className="flex flex-1 items-center justify-center px-6 text-center text-xs text-muted-foreground"
-        >
-          Drop images here, or browse your library to bring assets onto the canvas.
+        <TabsContent value="assets" className="flex-1 overflow-hidden">
+          <AssetsPanel />
         </TabsContent>
       </Tabs>
     </aside>

@@ -6,27 +6,45 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@workspace/ui/lib/utils"
 import { Analytics } from "@vercel/analytics/next"
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://suite.alexisbouchez.com"
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Hypersuite",
     template: "%s - Hypersuite",
   },
   description: "An open source creative suite.",
   applicationName: "Hypersuite",
-  authors: [{ name: "Alexis Bouchez" }],
+  authors: [{ name: "Alexis Bouchez", url: "https://github.com/alexisbchz" }],
   creator: "Alexis Bouchez",
   publisher: "Alexis Bouchez",
+  keywords: [
+    "Hypersuite",
+    "creative suite",
+    "open source",
+    "image editor",
+    "audio",
+    "AI",
+    "in-browser",
+  ],
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     title: "Hypersuite",
     description: "An open source creative suite.",
     siteName: "Hypersuite",
     type: "website",
     locale: "en_US",
+    url: SITE_URL,
   },
   twitter: {
     card: "summary_large_image",
     title: "Hypersuite",
     description: "An open source creative suite.",
+    creator: "@alexisbchz",
   },
 }
 

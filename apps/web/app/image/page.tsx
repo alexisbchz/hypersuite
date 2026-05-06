@@ -1,5 +1,6 @@
 import { Canvas } from "./_components/canvas"
 import { EditorProvider } from "./_components/editor-context"
+import { KeyboardShortcuts } from "./_components/keyboard-shortcuts"
 import { RightPanel } from "./_components/right-panel"
 import { StatusBar } from "./_components/status-bar"
 import { ToolPalette } from "./_components/tool-palette"
@@ -12,6 +13,7 @@ export const metadata = {
 export default function Page() {
   return (
     <EditorProvider>
+      <KeyboardShortcuts />
       <div className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground">
         <TopBar />
         <div className="flex flex-1 overflow-hidden">

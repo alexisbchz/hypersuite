@@ -13,7 +13,7 @@ export function ProductCard({ product }: { product: Product }) {
     <Link
       tabIndex={0}
       href={product.href}
-      className="group/product-card block rounded-lg no-underline transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+      className="group/product-card block min-w-[280px] flex-1 basis-72 rounded-lg no-underline transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
     >
       <div className="pointer-events-auto relative flex aspect-1050/660 w-full items-center justify-center overflow-hidden rounded-lg bg-muted shadow-sm">
         <Image
