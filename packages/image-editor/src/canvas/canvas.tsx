@@ -61,7 +61,6 @@ import {
   ZoomRect,
 } from "./overlays"
 import { CropOverlay } from "./crop-overlay"
-import { DocBackground } from "./doc-background"
 import { PenOverlay, PathEditOverlay } from "./pen-overlays"
 import { MultiSelectionHandles, SelectionHandles } from "./handles"
 import {
@@ -82,6 +81,7 @@ import { usePenTool } from "./hooks/use-pen-tool"
 import { useShapeDraw } from "./hooks/use-shape-draw"
 import { useWheelInteraction } from "./hooks/use-wheel-interaction"
 import { useZoomDrag } from "./hooks/use-zoom-drag"
+import { DocSurface } from "./doc-surface"
 
 export function Canvas() {
   const {
@@ -365,18 +365,6 @@ export function Canvas() {
     return ""
   }, [pan, panMode, drag, tool])
 
-  // The doc surface is just sized + transformed here; the checker and
-  // optional grid are separate `inset-0` children (see <DocBackground />)
-  // so they fill the surface exactly regardless of dimensions or transform.
-  const docSurfaceStyle = useMemo<React.CSSProperties>(
-    () => ({
-      width: DOC_W,
-      height: DOC_H,
-      transform: `translate(${panX}px, ${panY}px) scale(${scale})`,
-      transformOrigin: "center center",
-    }),
-    [DOC_W, DOC_H, panX, panY, scale]
-  )
 
   return (
     <div
@@ -412,14 +400,17 @@ export function Canvas() {
           )}
         </>
       )}
-      <div
+      <DocSurface
         ref={docRef}
-        data-doc-surface="true"
+        width={DOC_W}
+        height={DOC_H}
+        panX={panX}
+        panY={panY}
+        scale={scale}
+        showGrid={!!viewToggles?.grid}
         hidden={layers.length === 0}
-        className="relative shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_-8px_rgba(0,0,0,0.18),0_40px_80px_-32px_rgba(0,0,0,0.25)] ring-1 ring-border"
-        style={docSurfaceStyle}
+        className="shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_-8px_rgba(0,0,0,0.18),0_40px_80px_-32px_rgba(0,0,0,0.25)] ring-1 ring-border"
       >
-        <DocBackground showGrid={!!viewToggles?.grid} />
         <svg
           aria-hidden
           width="0"
@@ -862,7 +853,7 @@ export function Canvas() {
             className="pointer-events-none absolute inset-0 size-full"
           />
         )}
-      </div>
+      </DocSurface>
 
       {fileDragging && <DropOverlay />}
       {layers.length > 0 && (

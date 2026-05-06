@@ -131,3 +131,50 @@
     cursor: pointer;
     }
 }
+
+/* ── Image-editor doc surface ──────────────────────────────────────────
+   The surface element receives pan + zoom via CSS custom properties set
+   imperatively from the canvas component (no React reconciliation per
+   pan/zoom tick). The pattern child stays at a constant 20 SCREEN px
+   regardless of zoom because the parent's `scale(...)` is cancelled
+   inside `calc(20px / var(--doc-scale))`. */
+.doc-surface {
+  position: relative;
+  /* The doc surface lives in a `flex items-center justify-center` parent.
+     Without `flex-shrink: 0` the inline width / height get squished to fit
+     the container — a 3942×2642 doc was shrinking to ~1104×2642 when the
+     viewport was narrower than the doc, leaving the image overflowing the
+     pattern subdiv on one axis. */
+  flex-shrink: 0;
+  transform: translate(var(--pan-x, 0px), var(--pan-y, 0px))
+             scale(var(--doc-scale, 1));
+  transform-origin: center center;
+}
+
+.doc-pattern {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    conic-gradient(#cfcfcf 0% 25%, #ffffff 25% 50%,
+                   #cfcfcf 50% 75%, #ffffff 75%);
+  background-size:
+    calc(20px / var(--doc-scale, 1)) calc(20px / var(--doc-scale, 1));
+  background-repeat: repeat;
+}
+
+.doc-pattern[data-grid] {
+  background-image:
+    linear-gradient(to right,
+      color-mix(in oklch, var(--color-foreground), transparent 90%) 1px,
+      transparent 1px),
+    linear-gradient(to bottom,
+      color-mix(in oklch, var(--color-foreground), transparent 90%) 1px,
+      transparent 1px),
+    conic-gradient(#cfcfcf 0% 25%, #ffffff 25% 50%,
+                   #cfcfcf 50% 75%, #ffffff 75%);
+  background-size:
+    calc(20px / var(--doc-scale, 1)) calc(20px / var(--doc-scale, 1)),
+    calc(20px / var(--doc-scale, 1)) calc(20px / var(--doc-scale, 1)),
+    calc(20px / var(--doc-scale, 1)) calc(20px / var(--doc-scale, 1));
+}
