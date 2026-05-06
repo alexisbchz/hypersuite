@@ -42,6 +42,7 @@ import {
 } from "./export"
 import { SettingsDialog } from "./settings-dialog"
 import { DocumentDialog } from "./document-dialog"
+import { NewDocumentDialog } from "./new-document-dialog"
 import { ShortcutsDialog } from "./shortcuts-dialog"
 import { downloadBlob, loadHyperimg, saveHyperimg } from "./hyperimg"
 
@@ -74,6 +75,7 @@ export function TopBar() {
   const [exporting, setExporting] = useState<ExportFormat | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showDocument, setShowDocument] = useState(false)
+  const [showNewDoc, setShowNewDoc] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [shareStatus, setShareStatus] = useState<string | null>(null)
   const openInputRef = useRef<HTMLInputElement | null>(null)
@@ -208,6 +210,9 @@ export function TopBar() {
         <DropdownMenu>
           <DropdownMenuTrigger render={<button className={triggerCls}>File</button>} />
           <DropdownMenuContent align="start" className="min-w-52">
+            <DropdownMenuItem onClick={() => setShowNewDoc(true)}>
+              New…
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setShowDocument(true)}>
               Document settings…
             </DropdownMenuItem>
@@ -574,6 +579,11 @@ export function TopBar() {
 
       <SettingsDialog open={showSettings} onOpenChange={setShowSettings} />
       <DocumentDialog open={showDocument} onOpenChange={setShowDocument} />
+      <NewDocumentDialog
+        open={showNewDoc}
+        onOpenChange={setShowNewDoc}
+        onCreated={() => setName("Untitled")}
+      />
       <ShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} />
       <input
         ref={openInputRef}
