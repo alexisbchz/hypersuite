@@ -15,13 +15,16 @@ export const EXPORT_FORMATS: {
   { id: "svg", label: "SVG", ext: "svg", mime: "image/svg+xml" },
 ]
 
-const DOC_W = 1200
-const DOC_H = 800
+const DEFAULT_DOC_W = 1200
+const DEFAULT_DOC_H = 800
 
 type ExportContext = {
   layers: Layer[]
   filename: string
   format: ExportFormat
+  /** Document dimensions. Falls back to 1200×800 if omitted. */
+  width?: number
+  height?: number
   /** resolves CSS variable / oklch references to a concrete CSS color string */
   resolveColor?: (raw: string) => string
 }
@@ -42,7 +45,9 @@ const EXPORT_CACHE_MAX = 4
 function exportCacheKey(ctx: ExportContext): string {
   // JSON.stringify on layers gives a stable fingerprint.
   // Skip blob: URLs since they survive only this session anyway.
-  return `${ctx.format}::${JSON.stringify(ctx.layers)}`
+  const w = ctx.width ?? DEFAULT_DOC_W
+  const h = ctx.height ?? DEFAULT_DOC_H
+  return `${ctx.format}::${w}x${h}::${JSON.stringify(ctx.layers)}`
 }
 
 export async function exportToBlob(ctx: ExportContext): Promise<Blob> {
@@ -62,8 +67,12 @@ export async function exportToBlob(ctx: ExportContext): Promise<Blob> {
 async function renderRaster({
   layers,
   format,
+  width,
+  height,
   resolveColor,
 }: ExportContext): Promise<Blob> {
+  const docW = width ?? DEFAULT_DOC_W
+  const docH = height ?? DEFAULT_DOC_H
   // Smart preload: ensure every Google Font referenced by a text layer is
   // loaded before drawing, otherwise canvas falls back to system UI.
   const families = new Set<string>()
@@ -73,13 +82,15 @@ async function renderRaster({
   await Promise.all([...families].map((f) => ensureFont(f)))
 
   const canvas = document.createElement("canvas")
-  canvas.width = DOC_W
-  canvas.height = DOC_H
+  canvas.width = docW
+  canvas.height = docH
   const ctx = canvas.getContext("2d")!
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = "high"
 
   if (format === "jpeg") {
     ctx.fillStyle = resolveColor?.("var(--color-background)") ?? "#ffffff"
-    ctx.fillRect(0, 0, DOC_W, DOC_H)
+    ctx.fillRect(0, 0, docW, docH)
   }
 
   // Bottom-up draw order: last layer in array is at bottom, first at top.
@@ -120,11 +131,14 @@ async function renderRaster({
 
     if (l.kind === "image" && l.src) {
       const img = await loadImage(l.src)
-      ctx.drawImage(img, 0, 0, l.width, l.height)
+      drawImageCover(ctx, img, 0, 0, l.width, l.height)
     } else if (l.kind === "image" && l.id === "photo") {
       try {
-        const img = await loadImage("/_next/image?url=%2Fillustration.webp&w=1200&q=90")
-        ctx.drawImage(img, 0, 0, l.width, l.height)
+        // Load the original asset at full resolution — going through
+        // /_next/image downsamples to w=1200 and re-encodes at q=90,
+        // which destroys quality on exports larger than 1200px.
+        const img = await loadImage("/illustration.webp")
+        drawImageCover(ctx, img, 0, 0, l.width, l.height)
       } catch {
         // fall through if not available — skip
       }
@@ -208,7 +222,8 @@ async function renderRaster({
   }
 
   const mime = EXPORT_FORMATS.find((f) => f.id === format)!.mime
-  const quality = format === "jpeg" || format === "webp" ? 0.92 : undefined
+  // PNG ignores quality (lossless). JPEG/WebP get a high quality factor.
+  const quality = format === "jpeg" || format === "webp" ? 0.95 : undefined
   return new Promise<Blob>((resolve, reject) =>
     canvas.toBlob(
       (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
@@ -218,10 +233,17 @@ async function renderRaster({
   )
 }
 
-async function renderSvg({ layers, resolveColor }: ExportContext): Promise<Blob> {
+async function renderSvg({
+  layers,
+  width,
+  height,
+  resolveColor,
+}: ExportContext): Promise<Blob> {
+  const docW = width ?? DEFAULT_DOC_W
+  const docH = height ?? DEFAULT_DOC_H
   const parts: string[] = []
   parts.push(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${DOC_W}" height="${DOC_H}" viewBox="0 0 ${DOC_W} ${DOC_H}">`
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${docW}" height="${docH}" viewBox="0 0 ${docW} ${docH}">`
   )
   for (const l of [...layers].reverse()) {
     if (!l.visible) continue
@@ -291,6 +313,85 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = reject
     img.src = src
   })
+}
+
+/** Replicates CSS `object-fit: cover` — center-crops the source image so
+ *  it fills the destination rect without distortion. */
+function drawImageCover(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+) {
+  const sw = img.naturalWidth || img.width
+  const sh = img.naturalHeight || img.height
+  if (!sw || !sh) {
+    ctx.drawImage(img, dx, dy, dw, dh)
+    return
+  }
+  const destRatio = dw / dh
+  const srcRatio = sw / sh
+  let cropW: number
+  let cropH: number
+  if (srcRatio > destRatio) {
+    cropH = sh
+    cropW = sh * destRatio
+  } else {
+    cropW = sw
+    cropH = sw / destRatio
+  }
+  const cropX = (sw - cropW) / 2
+  const cropY = (sh - cropH) / 2
+  drawDownscaled(ctx, img, cropX, cropY, cropW, cropH, dx, dy, dw, dh)
+}
+
+/** High-quality downscale via progressive 2× halving. Single-pass
+ *  Canvas2D drawImage looks blurry/aliased when shrinking by more than ~2×;
+ *  halving step-by-step (each step ≤2× shrink) yields much sharper results.
+ *  When the shrink ratio is already ≤2×, falls back to direct drawImage. */
+function drawDownscaled(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement | HTMLCanvasElement,
+  sx: number,
+  sy: number,
+  sw: number,
+  sh: number,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+) {
+  if (sw <= dw * 2 && sh <= dh * 2) {
+    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh)
+    return
+  }
+  let curW = Math.max(Math.round(sw / 2), Math.round(dw))
+  let curH = Math.max(Math.round(sh / 2), Math.round(dh))
+  let cur: HTMLCanvasElement = document.createElement("canvas")
+  cur.width = curW
+  cur.height = curH
+  let cctx = cur.getContext("2d")!
+  cctx.imageSmoothingEnabled = true
+  cctx.imageSmoothingQuality = "high"
+  cctx.drawImage(img, sx, sy, sw, sh, 0, 0, curW, curH)
+  while (curW > dw * 2 && curH > dh * 2) {
+    const nextW = Math.max(Math.round(curW / 2), Math.round(dw))
+    const nextH = Math.max(Math.round(curH / 2), Math.round(dh))
+    const next = document.createElement("canvas")
+    next.width = nextW
+    next.height = nextH
+    const nctx = next.getContext("2d")!
+    nctx.imageSmoothingEnabled = true
+    nctx.imageSmoothingQuality = "high"
+    nctx.drawImage(cur, 0, 0, curW, curH, 0, 0, nextW, nextH)
+    cur = next
+    cctx = nctx
+    curW = nextW
+    curH = nextH
+  }
+  ctx.drawImage(cur, 0, 0, curW, curH, dx, dy, dw, dh)
 }
 
 async function blobUrlToDataUrl(url: string): Promise<string> {

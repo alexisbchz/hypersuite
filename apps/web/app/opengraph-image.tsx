@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og"
 
-export const alt = "Hypersuite — an open source creative suite"
+export const alt = "Hypersuite — an open source creativity suite"
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
 
@@ -66,7 +66,7 @@ export default function OpengraphImage() {
             zIndex: 1,
           }}
         >
-          An open source creative suite.
+          An open source creativity suite.
         </p>
         <p
           style={{

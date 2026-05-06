@@ -6,7 +6,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const title = url.searchParams.get("title") ?? "Hypersuite"
   const subtitle =
-    url.searchParams.get("subtitle") ?? "An open source creative suite."
+    url.searchParams.get("subtitle") ?? "An open source creativity suite."
   const palette = url.searchParams.get("palette") ?? "pink"
 
   const gradients: Record<string, string> = {

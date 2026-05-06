@@ -15,14 +15,14 @@ export const metadata: Metadata = {
     default: "Hypersuite",
     template: "%s - Hypersuite",
   },
-  description: "An open source creative suite.",
+  description: "An open source creativity suite.",
   applicationName: "Hypersuite",
   authors: [{ name: "Alexis Bouchez", url: "https://github.com/alexisbchz" }],
   creator: "Alexis Bouchez",
   publisher: "Alexis Bouchez",
   keywords: [
     "Hypersuite",
-    "creative suite",
+    "creativity suite",
     "open source",
     "image editor",
     "audio",
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Hypersuite",
-    description: "An open source creative suite.",
+    description: "An open source creativity suite.",
     siteName: "Hypersuite",
     type: "website",
     locale: "en_US",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Hypersuite",
-    description: "An open source creative suite.",
+    description: "An open source creativity suite.",
     creator: "@alexisbchz",
   },
 }

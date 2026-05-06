@@ -1,6 +1,6 @@
 # Hypersuite
 
-> An open source creative suite.
+> An open source creativity suite.
 
 ## License
 

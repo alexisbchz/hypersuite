@@ -43,7 +43,7 @@ export default function Page() {
           <LogoMenu />
           <h1 className="text-lg font-semibold">Hypersuite</h1>
           <p className="text-lg text-muted-foreground">
-            An open source creative suite.
+            An open source creativity suite.
           </p>
         </div>
 

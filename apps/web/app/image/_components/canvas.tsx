@@ -1484,7 +1484,7 @@ export function Canvas() {
       <div
         ref={docRef}
         data-doc-surface="true"
-        className="relative shadow-[0_30px_80px_-20px_rgba(0,0,0,0.35)] ring-1 ring-border"
+        className="relative shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_-8px_rgba(0,0,0,0.18),0_40px_80px_-32px_rgba(0,0,0,0.25)] ring-1 ring-border"
         style={{
           width: DOC_W,
           height: DOC_H,
@@ -1611,13 +1611,10 @@ export function Canvas() {
 
             const showCropFrame =
               tool === "crop" && selected && l.id !== "bg" && !l.locked
-            const overlay = showHandles ? (
-              <SelectionHandles
-                scale={scale}
-                onResize={(e, handle) => startResize(e, l, handle)}
-                onRotate={(e) => startRotate(e, l)}
-              />
-            ) : showCropFrame ? (
+            // Single-select transform controls render at the top level (see
+            // below the layer loop) so they paint above front-most layers.
+            // Crop frame stays nested — it relies on per-layer clipping.
+            const overlay = showCropFrame ? (
               <CropOverlay
                 layer={l}
                 scale={scale}
@@ -1843,6 +1840,39 @@ export function Canvas() {
                   startMultiRotate(e, centerClient)
                 }
               />
+            )
+          })()}
+        {selectedIds.length === 1 &&
+          tool === "move" &&
+          !panMode &&
+          (() => {
+            const sel = layers.find((l) => l.id === selectedIds[0])
+            if (!sel || sel.locked || !sel.visible) return null
+            const inv = 1 / Math.max(scale, 0.001)
+            return (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute"
+                style={{
+                  left: sel.x,
+                  top: sel.y,
+                  width: sel.width,
+                  height: sel.height,
+                  transform: `rotate(${sel.rotation}deg)`,
+                }}
+              >
+                <div
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    outline: `${inv}px solid var(--color-primary)`,
+                  }}
+                />
+                <SelectionHandles
+                  scale={scale}
+                  onResize={(e, handle) => startResize(e, sel, handle)}
+                  onRotate={(e) => startRotate(e, sel)}
+                />
+              </div>
             )
           })()}
         {marquee && <MarqueeRect marquee={marquee} scale={scale} />}

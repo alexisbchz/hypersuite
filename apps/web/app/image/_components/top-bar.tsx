@@ -88,13 +88,15 @@ export function TopBar() {
           layers,
           filename: name,
           format,
+          width: docSettings.width,
+          height: docSettings.height,
           resolveColor: makeColorResolver(),
         })
       } finally {
         setExporting(null)
       }
     },
-    [layers, name]
+    [layers, name, docSettings.width, docSettings.height]
   )
 
   const handleCopyLink = useCallback(async () => {
@@ -152,6 +154,8 @@ export function TopBar() {
         layers,
         filename: name,
         format: "png",
+        width: docSettings.width,
+        height: docSettings.height,
         resolveColor: makeColorResolver(),
       })
       // Cast to satisfy TS lib lacking ClipboardItem in some envs.
@@ -171,7 +175,7 @@ export function TopBar() {
       setShareStatus("Copy failed")
     }
     setTimeout(() => setShareStatus(null), 1500)
-  }, [layers, name])
+  }, [layers, name, docSettings.width, docSettings.height])
 
   const sel = layers.find((l) => l.id === selectedId) ?? null
   const selIdx = sel ? layers.findIndex((l) => l.id === sel.id) : -1
