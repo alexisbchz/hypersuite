@@ -170,8 +170,7 @@ async function renderRaster({
         // fall through if not available — skip
       }
     } else if (l.kind === "text") {
-      const content =
-        l.text ?? (l.id === "title" ? "Hypersuite" : l.name)
+      const content = l.text ?? (l.id === "title" ? "Hypersuite" : l.name)
       const size = l.fontSize ?? 56
       const weight = l.fontWeight ?? 600
       ctx.fillStyle = resolveColor?.(l.color ?? "#000") ?? "#000"
@@ -183,7 +182,18 @@ async function renderRaster({
       // provides one; falling back to the dataURL avoids a PNG round-trip.
       const rc = getRasterCanvas?.(l.id)
       if (rc && rc.width > 0 && rc.height > 0) {
-        drawDownscaled(ctx, rc, 0, 0, rc.width, rc.height, 0, 0, l.width, l.height)
+        drawDownscaled(
+          ctx,
+          rc,
+          0,
+          0,
+          rc.width,
+          rc.height,
+          0,
+          0,
+          l.width,
+          l.height
+        )
       } else if (l.rasterDataUrl) {
         try {
           const img = await loadImage(l.rasterDataUrl)
@@ -365,7 +375,7 @@ function drawImageCover(
   dx: number,
   dy: number,
   dw: number,
-  dh: number,
+  dh: number
 ) {
   const sw = img.naturalWidth || img.width
   const sh = img.naturalHeight || img.height
@@ -403,7 +413,7 @@ function drawDownscaled(
   dx: number,
   dy: number,
   dw: number,
-  dh: number,
+  dh: number
 ) {
   // For moderate downscales the browser's native bicubic in a single
   // drawImage produces sharper results than progressive halving through

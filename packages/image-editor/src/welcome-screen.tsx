@@ -71,7 +71,7 @@ export function WelcomeScreen() {
 
           {recents.length > 0 && (
             <div className="mt-6">
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <p className="mb-2 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
                 Recent
               </p>
               <ul className="space-y-1 text-sm">

@@ -80,11 +80,7 @@ export function FontPicker({
           </button>
         }
       />
-      <PopoverContent
-        align="start"
-        sideOffset={6}
-        className="w-64 p-0"
-      >
+      <PopoverContent align="start" sideOffset={6} className="w-64 p-0">
         <Command>
           <CommandInput placeholder="Search fonts…" />
           <CommandList className="max-h-72">

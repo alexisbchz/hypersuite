@@ -119,7 +119,7 @@ export function TextEditor({
           onCommit((e.currentTarget as HTMLElement).textContent ?? "")
         }
       }}
-      className="min-w-[1ch] outline-none ring-1 ring-primary"
+      className="min-w-[1ch] ring-1 ring-primary outline-none"
       style={{ caretColor: "var(--color-primary)" }}
     >
       {initial}

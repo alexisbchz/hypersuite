@@ -1,12 +1,6 @@
 "use client"
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react"
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 
 import type { Layer } from "../../lib/types"
 import type { ShapeDrawState } from "../types"

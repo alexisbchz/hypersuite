@@ -61,6 +61,7 @@ import {
   ZoomRect,
 } from "./overlays"
 import { CropOverlay } from "./crop-overlay"
+import { DocBackground } from "./doc-background"
 import { PenOverlay, PathEditOverlay } from "./pen-overlays"
 import { MultiSelectionHandles, SelectionHandles } from "./handles"
 import {
@@ -151,13 +152,8 @@ export function Canvas() {
     }
     for (const f of families) void ensureFont(f)
   }, [layers])
-  const {
-    penAnchors,
-    setPenAnchors,
-    penHover,
-    setPenHover,
-    finishPenPath,
-  } = usePenTool({ tool, brushColor, addPath })
+  const { penAnchors, setPenAnchors, penHover, setPenHover, finishPenPath } =
+    usePenTool({ tool, brushColor, addPath })
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({
     v: [],
     h: [],
@@ -320,7 +316,15 @@ export function Canvas() {
         offset += 24
       }
     },
-    [scale, addImage, activeTabId, openImageInNewTab, DOC_W, DOC_H, layers.length]
+    [
+      scale,
+      addImage,
+      activeTabId,
+      openImageInNewTab,
+      DOC_W,
+      DOC_H,
+      layers.length,
+    ]
   )
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -343,8 +347,6 @@ export function Canvas() {
     if (dragDepth.current === 0) setFileDragging(false)
   }, [])
 
-
-
   // Clear wand mask when switching away from wand
   useEffect(() => {
     if (tool !== "wand" && pixelMask) {
@@ -363,60 +365,18 @@ export function Canvas() {
     return ""
   }, [pan, panMode, drag, tool])
 
-  // Memoise the doc-surface style so we don't allocate a fresh object on
-  // every cursor-coord update during pan. The canvas re-renders on every
-  // pointer move (cursor state lives on this component), so reducing the
-  // reconciliation cost here removes a class of subtle pan jitter.
-  const docSurfaceStyle = useMemo<React.CSSProperties>(() => {
-    const bg = docSettings?.background ?? "var(--color-background)"
-    const transparent =
-      !docSettings?.background || bg === "transparent" || bg === "none"
-    const checkerImage =
-      "linear-gradient(45deg, #cfcfcf 25%, transparent 25%, transparent 75%, #cfcfcf 75%, #cfcfcf), linear-gradient(45deg, #cfcfcf 25%, transparent 25%, transparent 75%, #cfcfcf 75%, #cfcfcf)"
-    const gridImage =
-      "linear-gradient(to right, color-mix(in oklch, var(--color-foreground), transparent 90%) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in oklch, var(--color-foreground), transparent 90%) 1px, transparent 1px)"
-    const grid = viewToggles?.grid
-    let backgroundImage: string | undefined
-    let backgroundSize: string | undefined
-    let backgroundRepeat: string | undefined
-    let backgroundPosition: string | undefined
-    if (transparent && grid) {
-      backgroundImage = `${gridImage}, ${checkerImage}`
-      backgroundSize = "20px 20px, 20px 20px, 20px 20px, 20px 20px"
-      backgroundPosition = "0 0, 0 0, 0 0, 10px 10px"
-      backgroundRepeat = "repeat"
-    } else if (transparent) {
-      backgroundImage = checkerImage
-      backgroundSize = "20px 20px, 20px 20px"
-      backgroundPosition = "0 0, 10px 10px"
-      backgroundRepeat = "repeat"
-    } else if (grid) {
-      backgroundImage = gridImage
-      backgroundSize = "20px 20px"
-      backgroundRepeat = "repeat"
-    }
-    return {
+  // The doc surface is just sized + transformed here; the checker and
+  // optional grid are separate `inset-0` children (see <DocBackground />)
+  // so they fill the surface exactly regardless of dimensions or transform.
+  const docSurfaceStyle = useMemo<React.CSSProperties>(
+    () => ({
       width: DOC_W,
       height: DOC_H,
-      backgroundColor: transparent ? "#ffffff" : bg,
-      backgroundImage,
-      backgroundSize,
-      backgroundPosition,
-      backgroundRepeat,
-      transform: `translate3d(${panX}px, ${panY}px, 0) scale(${scale})`,
+      transform: `translate(${panX}px, ${panY}px) scale(${scale})`,
       transformOrigin: "center center",
-      willChange: "transform",
-      backfaceVisibility: "hidden",
-    }
-  }, [
-    docSettings?.background,
-    viewToggles?.grid,
-    DOC_W,
-    DOC_H,
-    panX,
-    panY,
-    scale,
-  ])
+    }),
+    [DOC_W, DOC_H, panX, panY, scale]
+  )
 
   return (
     <div
@@ -459,6 +419,7 @@ export function Canvas() {
         className="relative shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_-8px_rgba(0,0,0,0.18),0_40px_80px_-32px_rgba(0,0,0,0.25)] ring-1 ring-border"
         style={docSurfaceStyle}
       >
+        <DocBackground showGrid={!!viewToggles?.grid} />
         <svg
           aria-hidden
           width="0"
@@ -504,9 +465,12 @@ export function Canvas() {
             const fx = l.effects ?? {}
             const filterParts: string[] = []
             const adj = l.adjustments
-            if (adj?.brightness) filterParts.push(`brightness(${1 + adj.brightness / 100})`)
-            if (adj?.contrast) filterParts.push(`contrast(${1 + adj.contrast / 100})`)
-            if (adj?.saturation) filterParts.push(`saturate(${1 + adj.saturation / 100})`)
+            if (adj?.brightness)
+              filterParts.push(`brightness(${1 + adj.brightness / 100})`)
+            if (adj?.contrast)
+              filterParts.push(`contrast(${1 + adj.contrast / 100})`)
+            if (adj?.saturation)
+              filterParts.push(`saturate(${1 + adj.saturation / 100})`)
             if (adj?.hue) filterParts.push(`hue-rotate(${adj.hue}deg)`)
             if (fx.blur) filterParts.push(`blur(${fx.blur}px)`)
             if (fx.shadow)
@@ -530,7 +494,7 @@ export function Canvas() {
 
             const common = {
               className: cn(
-                "absolute select-none outline-none",
+                "absolute outline-none select-none",
                 selected && !panMode && "ring-1 ring-primary",
                 draggable
                   ? drag?.primaryId === l.id
@@ -544,7 +508,8 @@ export function Canvas() {
                 width: l.width,
                 height: l.height,
                 opacity: l.opacity / 100,
-                mixBlendMode: l.blendMode as React.CSSProperties["mixBlendMode"],
+                mixBlendMode:
+                  l.blendMode as React.CSSProperties["mixBlendMode"],
                 transform: `rotate(${l.rotation}deg)`,
                 touchAction: "none",
                 filter,
@@ -906,5 +871,3 @@ export function Canvas() {
     </div>
   )
 }
-
-

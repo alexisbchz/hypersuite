@@ -47,9 +47,7 @@ export function DocumentDialog({
                 <button
                   key={p.label}
                   type="button"
-                  onClick={() =>
-                    setDocSettings({ width: p.w, height: p.h })
-                  }
+                  onClick={() => setDocSettings({ width: p.w, height: p.h })}
                   className={cn(
                     "rounded-md border border-border px-2 py-1.5 text-xs",
                     docSettings.width === p.w && docSettings.height === p.h
@@ -105,16 +103,12 @@ export function DocumentDialog({
                     ? docSettings.background
                     : "#ffffff"
                 }
-                onChange={(e) =>
-                  setDocSettings({ background: e.target.value })
-                }
+                onChange={(e) => setDocSettings({ background: e.target.value })}
                 className="h-7 w-10 cursor-pointer rounded border border-border bg-transparent"
               />
               <Input
                 value={docSettings.background}
-                onChange={(e) =>
-                  setDocSettings({ background: e.target.value })
-                }
+                onChange={(e) => setDocSettings({ background: e.target.value })}
                 placeholder="#ffffff or var(--color-background)"
               />
             </div>
@@ -128,7 +122,9 @@ export function DocumentDialog({
                 min={1}
                 value={docSettings.dpi}
                 onChange={(e) =>
-                  setDocSettings({ dpi: Math.max(1, parseInt(e.target.value || "72", 10)) })
+                  setDocSettings({
+                    dpi: Math.max(1, parseInt(e.target.value || "72", 10)),
+                  })
                 }
               />
             </div>
@@ -153,10 +149,7 @@ export function DocumentDialog({
                 value={docSettings.safeArea}
                 onChange={(e) =>
                   setDocSettings({
-                    safeArea: Math.max(
-                      0,
-                      parseInt(e.target.value || "0", 10)
-                    ),
+                    safeArea: Math.max(0, parseInt(e.target.value || "0", 10)),
                   })
                 }
               />

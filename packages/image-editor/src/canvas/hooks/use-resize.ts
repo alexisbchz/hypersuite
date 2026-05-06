@@ -76,9 +76,7 @@ export function useResize(opts: {
       let snapDx = 0
       let snapDy = 0
       if (!e.altKey && snappingOn && rotation === 0) {
-        const candidates: Rect[] = [
-          { x: 0, y: 0, width: docW, height: docH },
-        ]
+        const candidates: Rect[] = [{ x: 0, y: 0, width: docW, height: docH }]
         for (const l of layers) {
           if (l.id === resize.id || !l.visible) continue
           candidates.push({

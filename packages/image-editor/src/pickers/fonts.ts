@@ -23,12 +23,20 @@ export const GOOGLE_FONTS: FontDef[] = [
   { family: "Space Grotesk", category: "sans", weights: [400, 500, 700] },
   { family: "Work Sans", category: "sans", weights: [400, 500, 600, 700] },
   { family: "Poppins", category: "sans", weights: [400, 500, 600, 700, 800] },
-  { family: "Montserrat", category: "sans", weights: [400, 500, 600, 700, 800] },
+  {
+    family: "Montserrat",
+    category: "sans",
+    weights: [400, 500, 600, 700, 800],
+  },
   { family: "Nunito", category: "sans", weights: [400, 600, 700, 800] },
   { family: "Karla", category: "sans", weights: [400, 500, 700] },
   { family: "Figtree", category: "sans", weights: [400, 500, 600, 700, 800] },
 
-  { family: "Playfair Display", category: "serif", weights: [400, 600, 700, 900] },
+  {
+    family: "Playfair Display",
+    category: "serif",
+    weights: [400, 600, 700, 900],
+  },
   { family: "Merriweather", category: "serif", weights: [400, 700, 900] },
   { family: "Fraunces", category: "serif", weights: [400, 500, 600, 700, 900] },
   { family: "Crimson Pro", category: "serif", weights: [400, 600, 700] },
@@ -49,7 +57,11 @@ export const GOOGLE_FONTS: FontDef[] = [
 
   { family: "Caveat", category: "handwriting", weights: [400, 600, 700] },
   { family: "Pacifico", category: "handwriting", weights: [400] },
-  { family: "Dancing Script", category: "handwriting", weights: [400, 600, 700] },
+  {
+    family: "Dancing Script",
+    category: "handwriting",
+    weights: [400, 600, 700],
+  },
 ]
 
 export const ALL_FONTS: FontDef[] = [SYSTEM_FONT, ...GOOGLE_FONTS]

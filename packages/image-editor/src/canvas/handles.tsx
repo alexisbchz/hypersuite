@@ -115,7 +115,9 @@ export function MultiSelectionHandles({
   const rotateOffset = 22
   const lineWidth = 1 / Math.max(scale, 0.001)
 
-  const oppositeForHandle = (handle: ResizeHandle): { x: number; y: number } => {
+  const oppositeForHandle = (
+    handle: ResizeHandle
+  ): { x: number; y: number } => {
     let x = bounds.x + bounds.width / 2
     let y = bounds.y + bounds.height / 2
     if (handle === "e" || handle === "ne" || handle === "se") x = bounds.x

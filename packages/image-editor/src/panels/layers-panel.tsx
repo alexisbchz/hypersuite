@@ -86,11 +86,7 @@ export function LayersPanel() {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     const position: "before" | "after" =
       e.clientY < rect.top + rect.height / 2 ? "before" : "after"
-    if (
-      !dropAt ||
-      dropAt.targetId !== id ||
-      dropAt.position !== position
-    ) {
+    if (!dropAt || dropAt.targetId !== id || dropAt.position !== position) {
       setDropAt({ targetId: id, position })
     }
   }
@@ -108,8 +104,7 @@ export function LayersPanel() {
       setDropAt(null)
       return
     }
-    const insertIdx =
-      dropAt.position === "before" ? targetIdx : targetIdx + 1
+    const insertIdx = dropAt.position === "before" ? targetIdx : targetIdx + 1
     moveTo(dragId, insertIdx)
     setDragId(null)
     setDropAt(null)
@@ -189,7 +184,9 @@ export function LayersPanel() {
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
-                  const sel = layers.find((l) => selectedIds.includes(l.id) && l.kind === "group")
+                  const sel = layers.find(
+                    (l) => selectedIds.includes(l.id) && l.kind === "group"
+                  )
                   if (sel) ungroup(sel.id)
                 }}
                 disabled={
@@ -398,7 +395,10 @@ function LayerRow({
           >
             <HugeiconsIcon
               icon={ArrowRight01Icon}
-              className={cn("size-3 transition-transform", !collapsed && "rotate-90")}
+              className={cn(
+                "size-3 transition-transform",
+                !collapsed && "rotate-90"
+              )}
             />
           </button>
         ) : (
@@ -422,7 +422,7 @@ function LayerRow({
                 cancel()
               }
             }}
-            className="min-w-0 flex-1 rounded-sm bg-background px-1 py-0.5 text-xs text-foreground outline-none ring-1 ring-ring"
+            className="min-w-0 flex-1 rounded-sm bg-background px-1 py-0.5 text-xs text-foreground ring-1 ring-ring outline-none"
           />
         ) : (
           <span
@@ -447,10 +447,7 @@ function LayerRow({
                   className="inline-flex size-5 items-center justify-center rounded hover:text-foreground"
                   aria-label="More"
                 >
-                  <HugeiconsIcon
-                    icon={MoreHorizontalIcon}
-                    className="size-3"
-                  />
+                  <HugeiconsIcon icon={MoreHorizontalIcon} className="size-3" />
                 </button>
               }
             />
@@ -643,10 +640,7 @@ function LayerThumb({
     )
   }
   return (
-    <span
-      className={cn(baseCls, "bg-muted text-muted-foreground")}
-      aria-hidden
-    >
+    <span className={cn(baseCls, "bg-muted text-muted-foreground")} aria-hidden>
       <HugeiconsIcon icon={fallbackIcon} className="size-3.5" />
     </span>
   )

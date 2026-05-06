@@ -107,7 +107,7 @@ export function Composer() {
                         {voice.charAt(0).toLocaleUpperCase() + voice.slice(1)}
                         <HugeiconsIcon
                           icon={ArrowDown01Icon}
-                          className="-me-0.5 ms-0.5 size-3 text-muted-foreground"
+                          className="ms-0.5 -me-0.5 size-3 text-muted-foreground"
                           data-icon="inline-end"
                         />
                       </Button>
@@ -229,7 +229,7 @@ export function Composer() {
                   {voice.charAt(0).toLocaleUpperCase() + voice.slice(1)}
                   <HugeiconsIcon
                     icon={ArrowDown01Icon}
-                    className="-me-0.5 ms-0.5 size-3 text-muted-foreground"
+                    className="ms-0.5 -me-0.5 size-3 text-muted-foreground"
                     data-icon="inline-end"
                   />
                 </Button>

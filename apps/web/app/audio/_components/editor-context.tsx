@@ -249,7 +249,9 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     ]
   )
 
-  return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>
+  return (
+    <EditorContext.Provider value={value}>{children}</EditorContext.Provider>
+  )
 }
 
 export function useEditor() {

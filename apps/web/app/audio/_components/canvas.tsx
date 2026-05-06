@@ -55,8 +55,8 @@ function EmptyState() {
         <div>
           <p className="text-sm font-medium">No generations yet</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Type a prompt below and pick a voice to generate speech with
-            Pocket TTS.
+            Type a prompt below and pick a voice to generate speech with Pocket
+            TTS.
           </p>
         </div>
       </div>
@@ -73,14 +73,15 @@ function PendingCard({
     download && download.total
       ? Math.min(100, ((download.loaded ?? 0) / download.total) * 100)
       : null
-  const label = download
-    ? `Downloading ${download.name}…`
-    : "Generating audio…"
+  const label = download ? `Downloading ${download.name}…` : "Generating audio…"
   return (
     <div className="rounded-lg border border-border bg-background p-4 shadow-sm">
       <div className="flex items-center gap-3">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <HugeiconsIcon icon={AudioWave02Icon} className="size-5 animate-pulse" />
+          <HugeiconsIcon
+            icon={AudioWave02Icon}
+            className="size-5 animate-pulse"
+          />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{label}</p>

@@ -25,7 +25,10 @@ export function useLayerDrag(opts: {
   snappingOn: boolean
   docW: number
   docH: number
-  select: (id: string | null, opts?: { additive?: boolean; toggle?: boolean }) => void
+  select: (
+    id: string | null,
+    opts?: { additive?: boolean; toggle?: boolean }
+  ) => void
   patchMany: (ids: string[], updater: (l: Layer) => Partial<Layer>) => void
   commit: () => void
   setGuides: (g: { v: number[]; h: number[] }) => void
@@ -88,9 +91,7 @@ export function useLayerDrag(opts: {
 
       const primaryStart = drag.starts.get(drag.primaryId)
       if (!e.altKey && snappingOn && primary && primaryStart && moved) {
-        const candidates: Rect[] = [
-          { x: 0, y: 0, width: docW, height: docH },
-        ]
+        const candidates: Rect[] = [{ x: 0, y: 0, width: docW, height: docH }]
         for (const l of layers) {
           if (drag.starts.has(l.id) || !l.visible) continue
           candidates.push({

@@ -30,9 +30,7 @@ export function ShortcutsDialog({
         <div className="grid max-h-[60vh] grid-cols-2 gap-x-6 gap-y-4 overflow-y-auto pr-1">
           {SHORTCUTS.map((g) => (
             <div key={g.group} className="grid gap-1">
-              <p className="text-xs font-semibold text-foreground">
-                {g.group}
-              </p>
+              <p className="text-xs font-semibold text-foreground">{g.group}</p>
               <ul className="grid gap-0.5">
                 {g.items.map((it) => (
                   <li

@@ -132,7 +132,10 @@ export function PropertiesPanel() {
           </Section>
         )}
         {(tool === "pencil" || tool === "brush" || tool === "eraser") && (
-          <Section title={tool === "eraser" ? "Eraser" : "Brush"} icon={PaintBucketIcon}>
+          <Section
+            title={tool === "eraser" ? "Eraser" : "Brush"}
+            icon={PaintBucketIcon}
+          >
             <Row label="Size">
               <input
                 type="range"
@@ -172,10 +175,9 @@ export function PropertiesPanel() {
               <ColorField value={brushColor} onChange={setBrushColor} />
             </Row>
             <p className="px-1 text-[11px] text-muted-foreground">
-              Click to add a corner anchor. Drag while clicking to set a
-              smooth bezier handle. Click the first anchor to close, Enter
-              for open path, Esc to cancel. Select a path to drag its
-              anchors / handles.
+              Click to add a corner anchor. Drag while clicking to set a smooth
+              bezier handle. Click the first anchor to close, Enter for open
+              path, Esc to cancel. Select a path to drag its anchors / handles.
             </p>
           </Section>
         )}
@@ -206,7 +208,7 @@ export function PropertiesPanel() {
                 className={cn(
                   "h-7 w-full rounded-md border border-border text-xs",
                   pixelMask
-                    ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    ? "text-destructive-foreground bg-destructive hover:bg-destructive/90"
                     : "pointer-events-none opacity-40"
                 )}
               >
@@ -362,9 +364,7 @@ export function PropertiesPanel() {
               label="Op"
               value={layer.opacity}
               onFocus={commit}
-              onChange={(v) =>
-                patch(layer.id, { opacity: clamp(v, 0, 100) })
-              }
+              onChange={(v) => patch(layer.id, { opacity: clamp(v, 0, 100) })}
               suffix="%"
             />
           </div>
@@ -376,7 +376,8 @@ export function PropertiesPanel() {
               <Input
                 key={`txt-${layer.id}`}
                 defaultValue={
-                  layer.text ?? (layer.id === "title" ? "Hypersuite" : layer.name)
+                  layer.text ??
+                  (layer.id === "title" ? "Hypersuite" : layer.name)
                 }
                 onFocus={commit}
                 onChange={(e) =>
@@ -399,9 +400,7 @@ export function PropertiesPanel() {
                 label="Sz"
                 value={layer.fontSize ?? 56}
                 onFocus={commit}
-                onChange={(v) =>
-                  patch(layer.id, { fontSize: Math.max(1, v) })
-                }
+                onChange={(v) => patch(layer.id, { fontSize: Math.max(1, v) })}
                 suffix="px"
               />
               <NumField
@@ -422,9 +421,7 @@ export function PropertiesPanel() {
           <Row label="Blend mode">
             <select
               value={layer.blendMode}
-              onChange={(e) =>
-                setProp(layer.id, { blendMode: e.target.value })
-              }
+              onChange={(e) => setProp(layer.id, { blendMode: e.target.value })}
               className="h-7 w-full rounded-md border border-border bg-background px-2 text-xs capitalize outline-none focus:border-ring"
             >
               {BLEND_MODES.map((m) => (
@@ -485,12 +482,12 @@ export function PropertiesPanel() {
                   effects: {
                     ...(layer.effects ?? {}),
                     shadow: v
-                      ? layer.effects?.shadow ?? {
+                      ? (layer.effects?.shadow ?? {
                           x: 0,
                           y: 8,
                           blur: 16,
                           color: "#00000080",
-                        }
+                        })
                       : null,
                   },
                 })
@@ -570,7 +567,10 @@ export function PropertiesPanel() {
                   effects: {
                     ...(layer.effects ?? {}),
                     stroke: v
-                      ? layer.effects?.stroke ?? { width: 2, color: "#000000" }
+                      ? (layer.effects?.stroke ?? {
+                          width: 2,
+                          color: "#000000",
+                        })
                       : null,
                   },
                 })
@@ -621,12 +621,12 @@ export function PropertiesPanel() {
                   effects: {
                     ...(layer.effects ?? {}),
                     innerShadow: v
-                      ? layer.effects?.innerShadow ?? {
+                      ? (layer.effects?.innerShadow ?? {
                           x: 0,
                           y: 4,
                           blur: 12,
                           color: "#00000080",
-                        }
+                        })
                       : null,
                   },
                 })

@@ -27,7 +27,7 @@ export function TabBar({ onRequestNew }: { onRequestNew?: () => void }) {
               }
             }}
             className={cn(
-              "group relative flex h-full min-w-24 max-w-48 items-center gap-1 border-r border-border pl-3 pr-1 text-xs last:border-r-0",
+              "group relative flex h-full max-w-48 min-w-24 items-center gap-1 border-r border-border pr-1 pl-3 text-xs last:border-r-0",
               active
                 ? "bg-background text-foreground"
                 : "bg-transparent text-muted-foreground hover:bg-background/60 hover:text-foreground"
@@ -57,7 +57,7 @@ export function TabBar({ onRequestNew }: { onRequestNew?: () => void }) {
                 e.stopPropagation()
                 closeTab(t.id)
               }}
-              className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100 data-[active=true]:opacity-100"
+              className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-0 group-hover:opacity-100 hover:bg-muted hover:text-foreground data-[active=true]:opacity-100"
               data-active={active}
             >
               <HugeiconsIcon icon={Cancel01Icon} className="size-3" />

@@ -36,8 +36,7 @@ export function PenOverlay({
             }
             return `L${a.x} ${a.y}`
           })
-          .join(" ") +
-        (hover ? ` L${hover.x} ${hover.y}` : "")
+          .join(" ") + (hover ? ` L${hover.x} ${hover.y}` : "")
   return (
     <div
       aria-hidden
@@ -258,7 +257,8 @@ export function PathEditOverlay({
         <div key={i}>
           {dot(a.x, a.y, (e) => startDrag(e, i, "anchor"), false, "move")}
           {a.hIn && dot(a.hIn.x, a.hIn.y, (e) => startDrag(e, i, "in"), true)}
-          {a.hOut && dot(a.hOut.x, a.hOut.y, (e) => startDrag(e, i, "out"), true)}
+          {a.hOut &&
+            dot(a.hOut.x, a.hOut.y, (e) => startDrag(e, i, "out"), true)}
         </div>
       ))}
     </div>

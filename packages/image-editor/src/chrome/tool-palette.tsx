@@ -59,11 +59,21 @@ export function ToolPalette() {
   return (
     <aside className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-2">
       {TOP.map((t) => (
-        <ToolButton key={t.id} tool={t} active={tool === t.id} onSelect={setTool} />
+        <ToolButton
+          key={t.id}
+          tool={t}
+          active={tool === t.id}
+          onSelect={setTool}
+        />
       ))}
       <Separator className="my-1 w-6" />
       {BOTTOM.map((t) => (
-        <ToolButton key={t.id} tool={t} active={tool === t.id} onSelect={setTool} />
+        <ToolButton
+          key={t.id}
+          tool={t}
+          active={tool === t.id}
+          onSelect={setTool}
+        />
       ))}
     </aside>
   )

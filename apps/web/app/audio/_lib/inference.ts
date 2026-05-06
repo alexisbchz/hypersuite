@@ -1,22 +1,22 @@
 // @ts-nocheck
 // Vendored verbatim from https://github.com/ekzhang/jax-js/blob/main/website/src/routes/tts/inference.ts
-import { numpy as np, random, tree } from "@jax-js/jax";
+import { numpy as np, random, tree } from "@jax-js/jax"
 
-import type { AudioPlayer } from "./audio";
+import type { AudioPlayer } from "./audio"
 import {
   createFlowLMState,
   createMimiDecodeState,
   type PocketTTS,
   runFlowLMStep,
   runMimiDecode,
-} from "./pocket-tts";
+} from "./pocket-tts"
 
 export interface PlayTTSOptions {
-  framesAfterEos: number;
-  seed: number | null;
-  lsdDecodeSteps: number;
-  temperature: number;
-  noiseClamp: number | null;
+  framesAfterEos: number
+  seed: number | null
+  lsdDecodeSteps: number
+  temperature: number
+  noiseClamp: number | null
 }
 
 export async function playTTS(
@@ -29,25 +29,25 @@ export async function playTTS(
     lsdDecodeSteps = 1,
     temperature = 0.7,
     noiseClamp = null,
-  }: Partial<PlayTTSOptions> = {},
+  }: Partial<PlayTTSOptions> = {}
 ): Promise<void> {
-  let sequence = model.flowLM.bosEmb.ref.reshape([1, -1]); // [1, 32]
-  let audioPromise: Promise<void> = Promise.resolve();
+  let sequence = model.flowLM.bosEmb.ref.reshape([1, -1]) // [1, 32]
+  let audioPromise: Promise<void> = Promise.resolve()
 
-  if (seed === null) seed = Math.floor(Math.random() * 2 ** 32);
-  let key = random.key(seed);
+  if (seed === null) seed = Math.floor(Math.random() * 2 ** 32)
+  let key = random.key(seed)
 
   try {
-    let flowLMState = createFlowLMState(model.flowLM);
-    let mimiState = createMimiDecodeState(model.mimi);
-    let eosStep: number | null = null;
+    let flowLMState = createFlowLMState(model.flowLM)
+    let mimiState = createMimiDecodeState(model.mimi)
+    let eosStep: number | null = null
 
-    console.log("Starting TTS generation...");
-    let lastTimestamp = performance.now();
+    console.log("Starting TTS generation...")
+    let lastTimestamp = performance.now()
 
     for (let step = 0; step < 1000; step++) {
-      let stepKey: np.Array;
-      [key, stepKey] = random.split(key);
+      let stepKey: np.Array
+      ;[key, stepKey] = random.split(key)
       const {
         latent,
         isEos,
@@ -61,62 +61,60 @@ export async function playTTS(
         flowLMState.kvCacheLen, // same as offset
         lsdDecodeSteps,
         temperature,
-        noiseClamp,
-      );
-      flowLMState = newFlowLMState;
+        noiseClamp
+      )
+      flowLMState = newFlowLMState
 
-      const isEosData = await isEos.data();
+      const isEosData = await isEos.data()
       if (isEosData[0] && eosStep === null) {
-        console.log(`🛑 EOS at step ${step}!`);
-        eosStep = step;
+        console.log(`🛑 EOS at step ${step}!`)
+        eosStep = step
       }
       if (eosStep !== null && step >= eosStep + framesAfterEos) {
         console.log(
-          `Generation ended at step ${step}, ${framesAfterEos} frames after EOS.`,
-        );
-        latent.dispose();
-        break;
+          `Generation ended at step ${step}, ${framesAfterEos} frames after EOS.`
+        )
+        latent.dispose()
+        break
       }
 
-      sequence = np.concatenate([sequence, latent]);
+      sequence = np.concatenate([sequence, latent])
 
-      const timestamp = performance.now();
+      const timestamp = performance.now()
       console.log(
-        `Generated step ${step} in ${(timestamp - lastTimestamp).toFixed(1)} ms`,
-      );
-      lastTimestamp = timestamp;
+        `Generated step ${step} in ${(timestamp - lastTimestamp).toFixed(1)} ms`
+      )
+      lastTimestamp = timestamp
 
-      let mimiInput = sequence.ref.slice([-1]);
+      let mimiInput = sequence.ref.slice([-1])
       mimiInput = mimiInput
         .mul(model.flowLM.embStd.ref)
-        .add(model.flowLM.embMean.ref);
+        .add(model.flowLM.embMean.ref)
 
       const [audio, newMimiState] = runMimiDecode(
         tree.ref(model.mimi),
         mimiState,
         mimiInput,
-        step,
-      );
-      mimiState = newMimiState;
+        step
+      )
+      mimiState = newMimiState
 
-      const lastAudioPromise = audioPromise;
+      const lastAudioPromise = audioPromise
       audioPromise = (async () => {
         const audioPcm = (await np
           .clip(audio.slice(0), -1, 1)
           .astype(np.float32)
-          .data()) as Float32Array;
+          .data()) as Float32Array
         if (audioPcm.length !== 1920) {
-          throw new Error(
-            `expected 1920 audio samples, got ${audioPcm.length}`,
-          );
+          throw new Error(`expected 1920 audio samples, got ${audioPcm.length}`)
         }
-        await lastAudioPromise;
-        await player.playChunk(audioPcm);
-      })();
+        await lastAudioPromise
+        await player.playChunk(audioPcm)
+      })()
     }
   } finally {
-    sequence.dispose();
-    tree.dispose([model, embeds]);
-    await audioPromise;
+    sequence.dispose()
+    tree.dispose([model, embeds])
+    await audioPromise
   }
 }

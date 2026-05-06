@@ -2,18 +2,14 @@
 
 import { useCallback, type RefObject } from "react"
 
-import {
-  applyStroke,
-  floodFillMask,
-  sampleColorAt,
-} from "../utils"
+import { applyStroke, floodFillMask, sampleColorAt } from "../utils"
+import type { Anchor, Layer, ShapeVariant, ToolId } from "../../lib/types"
 import type {
-  Anchor,
-  Layer,
-  ShapeVariant,
-  ToolId,
-} from "../../lib/types"
-import type { MarqueeState, ShapeDrawState, StrokeState, ZoomDragState } from "../types"
+  MarqueeState,
+  ShapeDrawState,
+  StrokeState,
+  ZoomDragState,
+} from "../types"
 
 /** Tool dispatcher for pointer-down on the canvas container. Each tool's
  *  branch is small in isolation but they share a common preamble (early
@@ -44,7 +40,9 @@ export function useCanvasPointer(opts: {
   setPenHover: (p: { x: number; y: number } | null) => void
   setCursor: (c: { x: number; y: number } | null) => void
   setBrushColor: (c: string) => void
-  setPixelMask: (m: { dataUrl: string; width: number; height: number } | null) => void
+  setPixelMask: (
+    m: { dataUrl: string; width: number; height: number } | null
+  ) => void
   setTool: (t: ToolId) => void
   select: (id: string | null) => void
   addText: (opts: {
@@ -407,7 +405,16 @@ export function useCanvasPointer(opts: {
         if (tool === "pen") setPenHover(null)
       }
     },
-    [scale, setCursor, tool, penAnchors.length, DOC_W, DOC_H, docRef, setPenHover]
+    [
+      scale,
+      setCursor,
+      tool,
+      penAnchors.length,
+      DOC_W,
+      DOC_H,
+      docRef,
+      setPenHover,
+    ]
   )
 
   return { onContainerPointerDown, onPointerMoveCanvas }

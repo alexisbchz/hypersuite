@@ -108,7 +108,16 @@ export type PanState = {
   startPanY: number
 }
 
-export type CropHandle = "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w" | "move"
+export type CropHandle =
+  | "nw"
+  | "ne"
+  | "sw"
+  | "se"
+  | "n"
+  | "s"
+  | "e"
+  | "w"
+  | "move"
 
 export const SNAP_THRESHOLD = 6
 export const DEFAULT_DOC_W = 1200

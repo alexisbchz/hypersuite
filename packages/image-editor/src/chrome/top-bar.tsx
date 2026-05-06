@@ -235,7 +235,7 @@ export function TopBar() {
           render={
             <Link
               href="/"
-              className="flex h-11 w-12 shrink-0 items-center justify-center hover:bg-muted -mr-[1px]"
+              className="-mr-[1px] flex h-11 w-12 shrink-0 items-center justify-center hover:bg-muted"
             >
               <Image
                 src="/logo.svg"
@@ -254,7 +254,9 @@ export function TopBar() {
 
       <nav className="ml-1 flex items-center text-sm">
         <DropdownMenu>
-          <DropdownMenuTrigger render={<button className={triggerCls}>File</button>} />
+          <DropdownMenuTrigger
+            render={<button className={triggerCls}>File</button>}
+          />
           <DropdownMenuContent align="start" className="min-w-52">
             <DropdownMenuItem onClick={() => setShowNewDoc(true)}>
               New…
@@ -282,7 +284,9 @@ export function TopBar() {
         </DropdownMenu>
 
         <DropdownMenu>
-          <DropdownMenuTrigger render={<button className={triggerCls}>Edit</button>} />
+          <DropdownMenuTrigger
+            render={<button className={triggerCls}>Edit</button>}
+          />
           <DropdownMenuContent align="start" className="min-w-52">
             <DropdownMenuItem onClick={undo} disabled={!canUndo}>
               Undo
@@ -314,17 +318,15 @@ export function TopBar() {
         </DropdownMenu>
 
         <DropdownMenu>
-          <DropdownMenuTrigger render={<button className={triggerCls}>View</button>} />
+          <DropdownMenuTrigger
+            render={<button className={triggerCls}>View</button>}
+          />
           <DropdownMenuContent align="start" className="min-w-52">
-            <DropdownMenuItem
-              onClick={() => setZoom(Math.round(zoom * 1.2))}
-            >
+            <DropdownMenuItem onClick={() => setZoom(Math.round(zoom * 1.2))}>
               Zoom in
               <DropdownMenuShortcut>⌘=</DropdownMenuShortcut>
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => setZoom(Math.round(zoom / 1.2))}
-            >
+            <DropdownMenuItem onClick={() => setZoom(Math.round(zoom / 1.2))}>
               Zoom out
               <DropdownMenuShortcut>⌘-</DropdownMenuShortcut>
             </DropdownMenuItem>
@@ -354,7 +356,9 @@ export function TopBar() {
         </DropdownMenu>
 
         <DropdownMenu>
-          <DropdownMenuTrigger render={<button className={triggerCls}>Image</button>} />
+          <DropdownMenuTrigger
+            render={<button className={triggerCls}>Image</button>}
+          />
           <DropdownMenuContent align="start" className="min-w-52">
             <DropdownMenuItem onClick={() => setShowDocument(true)}>
               Document settings…
@@ -363,7 +367,9 @@ export function TopBar() {
         </DropdownMenu>
 
         <DropdownMenu>
-          <DropdownMenuTrigger render={<button className={triggerCls}>Object</button>} />
+          <DropdownMenuTrigger
+            render={<button className={triggerCls}>Object</button>}
+          />
           <DropdownMenuContent align="start" className="min-w-52">
             <DropdownMenuItem
               onClick={() => sel && moveTo(sel.id, 0)}
@@ -398,10 +404,7 @@ export function TopBar() {
             >
               {sel?.locked ? "Unlock" : "Lock"}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => duplicate()}
-              disabled={noSel}
-            >
+            <DropdownMenuItem onClick={() => duplicate()} disabled={noSel}>
               Duplicate
               <DropdownMenuShortcut>⌘D</DropdownMenuShortcut>
             </DropdownMenuItem>
@@ -409,7 +412,9 @@ export function TopBar() {
         </DropdownMenu>
 
         <DropdownMenu>
-          <DropdownMenuTrigger render={<button className={triggerCls}>Filter</button>} />
+          <DropdownMenuTrigger
+            render={<button className={triggerCls}>Filter</button>}
+          />
           <DropdownMenuContent align="start" className="min-w-52">
             <DropdownMenuLabel>Apply to selection</DropdownMenuLabel>
             <DropdownMenuItem
@@ -559,7 +564,7 @@ export function TopBar() {
           <select
             value={ZOOM_PRESETS.includes(zoom) ? zoom : ""}
             onChange={(e) => setZoom(Number(e.target.value))}
-            className="h-7 cursor-pointer appearance-none rounded-md border border-border bg-background pe-6 ps-2 text-xs font-medium text-foreground outline-none hover:bg-muted focus:border-ring"
+            className="h-7 cursor-pointer appearance-none rounded-md border border-border bg-background ps-2 pe-6 text-xs font-medium text-foreground outline-none hover:bg-muted focus:border-ring"
           >
             {!ZOOM_PRESETS.includes(zoom) && (
               <option value="" disabled>
@@ -593,7 +598,7 @@ export function TopBar() {
                 {exporting ? `Exporting ${exporting.toUpperCase()}…` : "Export"}
                 <HugeiconsIcon
                   icon={ArrowDown01Icon}
-                  className="-me-0.5 ms-0.5 size-3 text-muted-foreground"
+                  className="ms-0.5 -me-0.5 size-3 text-muted-foreground"
                   data-icon="inline-end"
                 />
               </Button>
@@ -678,7 +683,7 @@ export function TopBar() {
             </DropdownMenuItem>
             {recents.length > 0 && (
               <>
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide">
+                <DropdownMenuLabel className="text-[10px] tracking-wide uppercase">
                   Recent
                 </DropdownMenuLabel>
                 {recents.slice(0, 5).map((r) => (

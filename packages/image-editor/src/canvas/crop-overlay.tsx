@@ -23,13 +23,12 @@ export function CropOverlay({
   ) => void
   onCommit: () => void
 }) {
-  const crop =
-    layer.crop ?? {
-      x: 0,
-      y: 0,
-      width: layer.width,
-      height: layer.height,
-    }
+  const crop = layer.crop ?? {
+    x: 0,
+    y: 0,
+    width: layer.width,
+    height: layer.height,
+  }
   const inv = 1 / Math.max(scale, 0.001)
   const handlePx = 9
   const committedRef = useRef(false)

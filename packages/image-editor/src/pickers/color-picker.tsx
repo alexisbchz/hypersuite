@@ -81,7 +81,7 @@ export function ColorPicker({
   const isHex = /^#[0-9a-fA-F]{6}$/.test(value)
 
   return (
-    <div className="flex items-center gap-1.5 rounded-md border border-border bg-background pe-1.5 ps-1.5 focus-within:border-ring">
+    <div className="flex items-center gap-1.5 rounded-md border border-border bg-background ps-1.5 pe-1.5 focus-within:border-ring">
       <Popover>
         <PopoverTrigger
           render={
@@ -113,7 +113,7 @@ export function ColorPicker({
             </div>
             {recents.length > 0 && (
               <div>
-                <p className="mb-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                <p className="mb-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
                   Recent
                 </p>
                 <div className="grid grid-cols-8 gap-1">

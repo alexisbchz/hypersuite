@@ -93,7 +93,8 @@ export function floodFillMask(
     return null
   }
   const data = img.data
-  if (startX < 0 || startX >= DOC_W || startY < 0 || startY >= DOC_H) return null
+  if (startX < 0 || startX >= DOC_W || startY < 0 || startY >= DOC_H)
+    return null
   const idx0 = (startY * DOC_W + startX) * 4
   const r0 = data[idx0]!
   const g0 = data[idx0 + 1]!
@@ -119,10 +120,12 @@ export function floodFillMask(
     const y = stack.pop()!
     const x = stack.pop()!
     let lx = x
-    while (lx >= 0 && !mask[y * DOC_W + lx] && near(data, lx, y, r0, g0, b0)) lx--
+    while (lx >= 0 && !mask[y * DOC_W + lx] && near(data, lx, y, r0, g0, b0))
+      lx--
     lx++
     let rx = x
-    while (rx < DOC_W && !mask[y * DOC_W + rx] && near(data, rx, y, r0, g0, b0)) rx++
+    while (rx < DOC_W && !mask[y * DOC_W + rx] && near(data, rx, y, r0, g0, b0))
+      rx++
     rx--
     for (let i = lx; i <= rx; i++) {
       mask[y * DOC_W + i] = 1
@@ -283,7 +286,9 @@ export function resolveCssColorToHex(raw: string): string | null {
 
 export function rgbToHex(r: number, g: number, b: number) {
   const c = (n: number) =>
-    Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0")
+    Math.max(0, Math.min(255, Math.round(n)))
+      .toString(16)
+      .padStart(2, "0")
   return `#${c(r)}${c(g)}${c(b)}`
 }
 

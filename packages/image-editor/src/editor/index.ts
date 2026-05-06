@@ -1,8 +1,4 @@
-export {
-  EditorProvider,
-  useEditor,
-  type Tab,
-} from "./context"
+export { EditorProvider, useEditor, type Tab } from "./context"
 export {
   DEFAULT_DOC_SETTINGS,
   DEFAULT_PREFS,

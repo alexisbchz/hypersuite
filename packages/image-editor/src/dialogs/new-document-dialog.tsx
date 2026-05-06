@@ -17,7 +17,6 @@ import { cn } from "@workspace/ui/lib/utils"
 
 import { useEditor } from "../editor"
 import { DEFAULT_DOC_SETTINGS } from "../editor/doc"
-import type { Layer } from "../lib/types"
 
 const PRESETS: Array<{ label: string; w: number; h: number }> = [
   { label: "Square 1080", w: 1080, h: 1080 },
@@ -36,35 +35,22 @@ export function NewDocumentDialog({
   const { newTab } = useEditor()
   const [width, setWidth] = useState(DEFAULT_DOC_SETTINGS.width)
   const [height, setHeight] = useState(DEFAULT_DOC_SETTINGS.height)
-  const [background, setBackground] = useState(DEFAULT_DOC_SETTINGS.background)
 
   useEffect(() => {
     if (!open) return
     setWidth(DEFAULT_DOC_SETTINGS.width)
     setHeight(DEFAULT_DOC_SETTINGS.height)
-    setBackground(DEFAULT_DOC_SETTINGS.background)
   }, [open])
 
+  // Always start with a fully transparent doc — no auto-injected
+  // "Background" shape layer. The doc surface's transparency checker
+  // shows wherever no layer covers it, and the user can add a coloured
+  // background as a regular shape layer if they want one.
   const handleCreate = () => {
-    const bg: Layer = {
-      id: `bg-${Date.now()}`,
-      name: "Background",
-      kind: "shape",
-      visible: true,
-      locked: true,
-      opacity: 100,
-      blendMode: "normal",
-      x: 0,
-      y: 0,
-      width,
-      height,
-      rotation: 0,
-      color: background,
-    }
     newTab({
       name: "Untitled",
-      layers: [bg],
-      docSettings: { width, height, background },
+      layers: [],
+      docSettings: { width, height, background: "transparent" },
     })
     onOpenChange(false)
   }
@@ -75,7 +61,8 @@ export function NewDocumentDialog({
         <DialogHeader>
           <DialogTitle>New document</DialogTitle>
           <DialogDescription>
-            Pick a preset or enter custom dimensions. Opens in a new tab.
+            Pick a preset or enter custom dimensions. Opens in a new tab with
+            a transparent canvas.
           </DialogDescription>
         </DialogHeader>
 
@@ -128,23 +115,6 @@ export function NewDocumentDialog({
                 onChange={(e) =>
                   setHeight(Math.max(1, parseInt(e.target.value || "0", 10)))
                 }
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-1">
-            <Label>Background</Label>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={/^#/.test(background) ? background : "#ffffff"}
-                onChange={(e) => setBackground(e.target.value)}
-                className="h-7 w-10 cursor-pointer rounded border border-border bg-transparent"
-              />
-              <Input
-                value={background}
-                onChange={(e) => setBackground(e.target.value)}
-                placeholder="#ffffff or var(--color-background)"
               />
             </div>
           </div>

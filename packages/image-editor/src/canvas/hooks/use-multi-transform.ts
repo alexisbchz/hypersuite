@@ -37,9 +37,7 @@ export function useMultiTransform(opts: {
       const moved = multiResize.moved || Math.hypot(dx, dy) > 1
       if (moved && !multiResize.committed) {
         commit()
-        setMultiResize((s) =>
-          s ? { ...s, committed: true, moved: true } : s
-        )
+        setMultiResize((s) => (s ? { ...s, committed: true, moved: true } : s))
       } else if (moved && !multiResize.moved) {
         setMultiResize((s) => (s ? { ...s, moved: true } : s))
       }
@@ -190,9 +188,7 @@ export function useMultiTransform(opts: {
         x: (pivotClient.x - docRect.left) / scale,
         y: (pivotClient.y - docRect.top) / scale,
       }
-      const sel = layers.filter(
-        (l) => selectedIds.includes(l.id) && !l.locked
-      )
+      const sel = layers.filter((l) => selectedIds.includes(l.id) && !l.locked)
       const starts: MultiTransformStart[] = sel.map((l) => ({
         id: l.id,
         x: l.x,
@@ -222,9 +218,7 @@ export function useMultiTransform(opts: {
       if (e.button !== 0) return
       e.stopPropagation()
       e.preventDefault()
-      const sel = layers.filter(
-        (l) => selectedIds.includes(l.id) && !l.locked
-      )
+      const sel = layers.filter((l) => selectedIds.includes(l.id) && !l.locked)
       const starts: MultiTransformStart[] = sel.map((l) => ({
         id: l.id,
         x: l.x,

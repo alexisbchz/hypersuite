@@ -118,11 +118,7 @@ export function toLocal(dx: number, dy: number, rotationDeg: number): Vec2 {
   return rotateVec({ x: dx, y: dy }, -rotationDeg)
 }
 
-function pivotLocalForHandle(
-  handle: ResizeHandle,
-  w: number,
-  h: number
-): Vec2 {
+function pivotLocalForHandle(handle: ResizeHandle, w: number, h: number): Vec2 {
   let x = 0
   let y = 0
   if (handle === "e" || handle === "ne" || handle === "se") x = -w / 2
@@ -325,11 +321,7 @@ export function computeSnap(
           bestDx = d
           vGuides.length = 0
           vGuides.push(cx)
-        } else if (
-          ad === bestDxDist &&
-          d === bestDx &&
-          !vGuides.includes(cx)
-        ) {
+        } else if (ad === bestDxDist && d === bestDx && !vGuides.includes(cx)) {
           vGuides.push(cx)
         }
       }
@@ -343,11 +335,7 @@ export function computeSnap(
           bestDy = d
           hGuides.length = 0
           hGuides.push(cy)
-        } else if (
-          ad === bestDyDist &&
-          d === bestDy &&
-          !hGuides.includes(cy)
-        ) {
+        } else if (ad === bestDyDist && d === bestDy && !hGuides.includes(cy)) {
           hGuides.push(cy)
         }
       }
@@ -420,7 +408,8 @@ export function computeSpacingGuides(
       const B = hPeers[j]!
       const knownGap = B.x - (A.x + A.width)
       if (knownGap <= 0) continue
-      const cross = Math.max(A.y, B.y) + Math.min(A.y + A.height, B.y + B.height)
+      const cross =
+        Math.max(A.y, B.y) + Math.min(A.y + A.height, B.y + B.height)
       const crossY = cross / 2
       // Place dragged left of A
       const targetLeft = A.x - knownGap - dragged.width
@@ -473,8 +462,7 @@ export function computeSpacingGuides(
       const B = vPeers[j]!
       const knownGap = B.y - (A.y + A.height)
       if (knownGap <= 0) continue
-      const cross =
-        Math.max(A.x, B.x) + Math.min(A.x + A.width, B.x + B.width)
+      const cross = Math.max(A.x, B.x) + Math.min(A.x + A.width, B.x + B.width)
       const crossX = cross / 2
       const targetTop = A.y - knownGap - dragged.height
       const dyT = targetTop - dragged.y

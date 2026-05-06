@@ -216,13 +216,11 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     future: [],
   })
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [docSettings, setDocSettingsState] = useState<DocSettings>(
-    DEFAULT_DOC_SETTINGS
-  )
+  const [docSettings, setDocSettingsState] =
+    useState<DocSettings>(DEFAULT_DOC_SETTINGS)
   const [prefs, setPrefsState] = useState<Prefs>(DEFAULT_PREFS)
-  const [viewToggles, setViewTogglesState] = useState<ViewToggles>(
-    DEFAULT_VIEW_TOGGLES
-  )
+  const [viewToggles, setViewTogglesState] =
+    useState<ViewToggles>(DEFAULT_VIEW_TOGGLES)
   const [recents, setRecents] = useState<Recent[]>([])
   const [zoom, setZoomState] = useState(75)
   const [panX, setPanX] = useState(0)
@@ -234,9 +232,11 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   const [brushColor, setBrushColor] = useState("#111111")
   const [brushHardness, setBrushHardness] = useState(0.8)
   const [wandTolerance, setWandTolerance] = useState(32)
-  const [pixelMask, setPixelMask] = useState<
-    { dataUrl: string; width: number; height: number } | null
-  >(null)
+  const [pixelMask, setPixelMask] = useState<{
+    dataUrl: string
+    width: number
+    height: number
+  } | null>(null)
   const rasterCanvasRef = useRef<Map<string, HTMLCanvasElement>>(new Map())
   const hydratedRef = useRef(false)
 
@@ -298,24 +298,21 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     savePersistedRecents(recents)
   }, [recents])
 
-  const select = useCallback(
-    (id: string | null, opts: SelectOpts = {}) => {
-      if (id === null) {
-        setSelectedIds([])
-        return
+  const select = useCallback((id: string | null, opts: SelectOpts = {}) => {
+    if (id === null) {
+      setSelectedIds([])
+      return
+    }
+    setSelectedIds((prev) => {
+      if (opts.toggle) {
+        return prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
       }
-      setSelectedIds((prev) => {
-        if (opts.toggle) {
-          return prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-        }
-        if (opts.additive) {
-          return prev.includes(id) ? prev : [...prev, id]
-        }
-        return [id]
-      })
-    },
-    []
-  )
+      if (opts.additive) {
+        return prev.includes(id) ? prev : [...prev, id]
+      }
+      return [id]
+    })
+  }, [])
 
   const selectMany = useCallback((ids: string[]) => {
     setSelectedIds(ids)
@@ -427,9 +424,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       const idSet = new Set(ids)
       apply((ls) =>
         ls.map((l) =>
-          idSet.has(l.id) && !l.locked
-            ? { ...l, x: l.x + dx, y: l.y + dy }
-            : l
+          idSet.has(l.id) && !l.locked ? { ...l, x: l.x + dx, y: l.y + dy } : l
         )
       )
     },
@@ -790,7 +785,10 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       const src = URL.createObjectURL(file)
       const img = await loadImage(src)
       const max = opts.maxSize ?? 600
-      const ratio = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight))
+      const ratio = Math.min(
+        1,
+        max / Math.max(img.naturalWidth, img.naturalHeight)
+      )
       const width = Math.round(img.naturalWidth * ratio)
       const height = Math.round(img.naturalHeight * ratio)
       const id = `img-${Date.now()}`
@@ -842,9 +840,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       const scaleX = (viewport.width / rect.width) * padding
       const scaleY = (viewport.height / rect.height) * padding
       const nextScale = Math.min(scaleX, scaleY, 8)
-      const nextZoom = Math.round(
-        Math.min(800, Math.max(5, nextScale * 100))
-      )
+      const nextZoom = Math.round(Math.min(800, Math.max(5, nextScale * 100)))
       const ns = nextZoom / 100
       // Center the rect in the viewport. The doc is centered via flex; pan
       // shifts it from center. Doc center in doc coords is (600, 400).
@@ -903,15 +899,11 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
         const sel = ls.filter((l) => selectedIds.includes(l.id) && !l.locked)
         if (sel.length < 3) return ls
         const horiz = axis === "horizontal"
-        const sorted = [...sel].sort((a, b) =>
-          horiz ? a.x - b.x : a.y - b.y
-        )
+        const sorted = [...sel].sort((a, b) => (horiz ? a.x - b.x : a.y - b.y))
         const first = sorted[0]!
         const last = sorted[sorted.length - 1]!
         const startPos = horiz ? first.x : first.y
-        const endPos = horiz
-          ? last.x + last.width
-          : last.y + last.height
+        const endPos = horiz ? last.x + last.width : last.y + last.height
         const used = sorted.reduce(
           (s, l) => s + (horiz ? l.width : l.height),
           0
@@ -1135,12 +1127,9 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     [newTab, activeTabId, doc.layers]
   )
 
-  const setPref = useCallback(
-    <K extends keyof Prefs>(k: K, v: Prefs[K]) => {
-      setPrefsState((p) => ({ ...p, [k]: v }))
-    },
-    []
-  )
+  const setPref = useCallback(<K extends keyof Prefs>(k: K, v: Prefs[K]) => {
+    setPrefsState((p) => ({ ...p, [k]: v }))
+  }, [])
 
   const setViewToggle = useCallback(
     <K extends keyof ViewToggles>(k: K, v: boolean) => {

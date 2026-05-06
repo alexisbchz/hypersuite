@@ -29,7 +29,8 @@ export function ZoomRect({
         width: w,
         height: h,
         outline: `${lineWidth}px dashed var(--color-primary)`,
-        background: "color-mix(in oklch, var(--color-primary), transparent 90%)",
+        background:
+          "color-mix(in oklch, var(--color-primary), transparent 90%)",
       }}
     />
   )
@@ -58,7 +59,8 @@ export function MarqueeRect({
         top: y,
         width: w,
         height: h,
-        background: "color-mix(in oklch, var(--color-primary), transparent 85%)",
+        background:
+          "color-mix(in oklch, var(--color-primary), transparent 85%)",
         outline: `${lineWidth}px solid var(--color-primary)`,
       }}
     />
