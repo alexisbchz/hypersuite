@@ -4,9 +4,13 @@
  *  optional design grid. Each is its own `inset-0` div so the parent's
  *  size — whatever it is, however transformed — fills exactly. The
  *  user's chosen "background colour" is a real layer in the doc, not a
- *  CSS overlay here, so it doesn't double-paint. */
-const CHECKER_TILE =
-  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20'><rect width='10' height='10' fill='%23cfcfcf'/><rect x='10' y='10' width='10' height='10' fill='%23cfcfcf'/></svg>\")"
+ *  CSS overlay here, so it doesn't double-paint.
+ *
+ *  Pattern is a single conic-gradient — most reliable single-prop
+ *  approach, no two-gradient phase math, no SVG data-URI escaping
+ *  edge cases. */
+const CHECKER_PATTERN =
+  "conic-gradient(#cfcfcf 0% 25%, #ffffff 25% 50%, #cfcfcf 50% 75%, #ffffff 75%)"
 
 export function DocBackground({ showGrid }: { showGrid: boolean }) {
   return (
@@ -15,8 +19,7 @@ export function DocBackground({ showGrid }: { showGrid: boolean }) {
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
-          backgroundColor: "#ffffff",
-          backgroundImage: CHECKER_TILE,
+          backgroundImage: CHECKER_PATTERN,
           backgroundSize: "20px 20px",
           backgroundRepeat: "repeat",
         }}
