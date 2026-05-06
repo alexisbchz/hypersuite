@@ -25,10 +25,9 @@ type ExportContext = {
   /** Document dimensions. Falls back to 1200×800 if omitted. */
   width?: number
   height?: number
-  /** Output pixel multiplier (e.g. 2 on a Retina display). Defaults to
-   *  the device pixel ratio, capped at 3 for memory sanity. The composition
-   *  draws in doc-coords; the underlying canvas is allocated at
-   *  width*pr × height*pr. */
+  /** Output pixel multiplier. Defaults to **1** — the export resolution
+   *  is the doc's own pixel dimensions, not the user's screen DPI. Pass
+   *  `2` (etc.) to opt into a higher-density export. */
   pixelRatio?: number
   /** resolves CSS variable / oklch references to a concrete CSS color string */
   resolveColor?: (raw: string) => string
@@ -42,10 +41,11 @@ type ExportContext = {
   getRasterCanvas?: (id: string) => HTMLCanvasElement
 }
 
-function defaultPixelRatio(): number {
-  if (typeof window === "undefined") return 1
-  return Math.min(Math.max(1, window.devicePixelRatio || 1), 3)
-}
+// Default to 1 — exports should match the doc's pixel dimensions exactly,
+// not the user's screen DPI. (A 3650×2350 doc on a Retina display was
+// otherwise being exported at 7300×4700 and ~50 MB, which is virtually
+// always wrong.)
+const DEFAULT_PIXEL_RATIO = 1
 
 export async function exportComposition(ctx: ExportContext) {
   const blob = await exportToBlob(ctx)
@@ -65,7 +65,7 @@ function exportCacheKey(ctx: ExportContext): string {
   // Skip blob: URLs since they survive only this session anyway.
   const w = ctx.width ?? DEFAULT_DOC_W
   const h = ctx.height ?? DEFAULT_DOC_H
-  const pr = ctx.pixelRatio ?? defaultPixelRatio()
+  const pr = ctx.pixelRatio ?? DEFAULT_PIXEL_RATIO
   return `${ctx.format}::${w}x${h}@${pr}::${JSON.stringify(ctx.layers)}`
 }
 
@@ -95,7 +95,7 @@ async function renderRaster({
 }: ExportContext): Promise<Blob> {
   const docW = width ?? DEFAULT_DOC_W
   const docH = height ?? DEFAULT_DOC_H
-  const pr = pixelRatio ?? defaultPixelRatio()
+  const pr = pixelRatio ?? DEFAULT_PIXEL_RATIO
   // Smart preload: ensure every Google Font referenced by a text layer is
   // loaded before drawing, otherwise canvas falls back to system UI.
   const families = new Set<string>()
