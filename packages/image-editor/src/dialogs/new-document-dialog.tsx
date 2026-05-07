@@ -13,7 +13,6 @@ import {
 } from "@workspace/ui/components/dialog"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
-import { cn } from "@workspace/ui/lib/utils"
 
 import { useEditor } from "../editor"
 import { DEFAULT_DOC_SETTINGS } from "../editor/doc"
@@ -70,27 +69,26 @@ export function NewDocumentDialog({
           <div className="grid gap-2">
             <Label>Presets</Label>
             <div className="grid grid-cols-2 gap-2">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.label}
-                  type="button"
-                  onClick={() => {
-                    setWidth(p.w)
-                    setHeight(p.h)
-                  }}
-                  className={cn(
-                    "rounded-md border border-border px-2 py-1.5 text-xs",
-                    width === p.w && height === p.h
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted"
-                  )}
-                >
-                  {p.label}
-                  <span className="ms-1 font-mono text-[10px] opacity-70">
-                    {p.w}×{p.h}
-                  </span>
-                </button>
-              ))}
+              {PRESETS.map((p) => {
+                const active = width === p.w && height === p.h
+                return (
+                  <Button
+                    key={p.label}
+                    variant={active ? "default" : "outline"}
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => {
+                      setWidth(p.w)
+                      setHeight(p.h)
+                    }}
+                  >
+                    {p.label}
+                    <span className="ms-1 font-mono text-[10px] opacity-70">
+                      {p.w}×{p.h}
+                    </span>
+                  </Button>
+                )
+              })}
             </div>
           </div>
 

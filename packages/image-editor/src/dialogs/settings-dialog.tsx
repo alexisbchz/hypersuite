@@ -13,7 +13,6 @@ import { Label } from "@workspace/ui/components/label"
 import { Slider } from "@workspace/ui/components/slider"
 import { Switch } from "@workspace/ui/components/switch"
 import { Button } from "@workspace/ui/components/button"
-import { cn } from "@workspace/ui/lib/utils"
 
 import { useEditor } from "../editor"
 import {
@@ -49,19 +48,15 @@ export function SettingsDialog({
             <Label>Theme</Label>
             <div className="flex gap-1">
               {(["light", "dark", "system"] as const).map((t) => (
-                <button
+                <Button
                   key={t}
-                  type="button"
+                  variant={theme === t ? "default" : "outline"}
+                  size="sm"
+                  className="flex-1 capitalize"
                   onClick={() => setTheme(t)}
-                  className={cn(
-                    "flex-1 rounded-md border border-border px-3 py-1.5 text-xs capitalize",
-                    theme === t
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted"
-                  )}
                 >
                   {t}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -91,19 +86,15 @@ export function SettingsDialog({
             <Label>Default zoom</Label>
             <div className="flex gap-1">
               {ZOOM_PRESETS.map((z) => (
-                <button
+                <Button
                   key={z}
-                  type="button"
+                  variant={prefs.defaultZoom === z ? "default" : "outline"}
+                  size="sm"
+                  className="flex-1"
                   onClick={() => setPref("defaultZoom", z)}
-                  className={cn(
-                    "flex-1 rounded-md border border-border px-2 py-1.5 text-xs",
-                    prefs.defaultZoom === z
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted"
-                  )}
                 >
                   {z}%
-                </button>
+                </Button>
               ))}
             </div>
           </div>

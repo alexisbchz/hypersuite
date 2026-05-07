@@ -1,5 +1,6 @@
 "use client"
 
+import { Button } from "@workspace/ui/components/button"
 import {
   Dialog,
   DialogContent,
@@ -9,7 +10,6 @@ import {
 } from "@workspace/ui/components/dialog"
 import { Input } from "@workspace/ui/components/input"
 import { Label } from "@workspace/ui/components/label"
-import { cn } from "@workspace/ui/lib/utils"
 
 import { useEditor } from "../editor"
 
@@ -43,24 +43,24 @@ export function DocumentDialog({
           <div className="grid gap-2">
             <Label>Presets</Label>
             <div className="grid grid-cols-2 gap-2">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.label}
-                  type="button"
-                  onClick={() => setDocSettings({ width: p.w, height: p.h })}
-                  className={cn(
-                    "rounded-md border border-border px-2 py-1.5 text-xs",
-                    docSettings.width === p.w && docSettings.height === p.h
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted"
-                  )}
-                >
-                  {p.label}
-                  <span className="ms-1 font-mono text-[10px] opacity-70">
-                    {p.w}×{p.h}
-                  </span>
-                </button>
-              ))}
+              {PRESETS.map((p) => {
+                const active =
+                  docSettings.width === p.w && docSettings.height === p.h
+                return (
+                  <Button
+                    key={p.label}
+                    variant={active ? "default" : "outline"}
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => setDocSettings({ width: p.w, height: p.h })}
+                  >
+                    {p.label}
+                    <span className="ms-1 font-mono text-[10px] opacity-70">
+                      {p.w}×{p.h}
+                    </span>
+                  </Button>
+                )
+              })}
             </div>
           </div>
 
