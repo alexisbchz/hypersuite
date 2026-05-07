@@ -44,8 +44,6 @@ import {
 } from "./types"
 import {
   applyStroke,
-  compositeDocToCanvas,
-  floodFillMask,
   hasFiles,
   resolveCssColorToHex,
   rgbToHex,

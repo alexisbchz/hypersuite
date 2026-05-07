@@ -1,14 +1,46 @@
 import type { Layer } from "../lib/types"
 
+/** Center-crops the source so it fills the destination rect — matches the
+ *  CSS `object-fit: cover` semantics used to render image layers. */
+function drawImageCover(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number
+) {
+  const sw = img.naturalWidth || img.width
+  const sh = img.naturalHeight || img.height
+  if (!sw || !sh) {
+    ctx.drawImage(img, dx, dy, dw, dh)
+    return
+  }
+  const destRatio = dw / dh
+  const srcRatio = sw / sh
+  let cropW: number
+  let cropH: number
+  if (srcRatio > destRatio) {
+    cropH = sh
+    cropW = sh * destRatio
+  } else {
+    cropW = sw
+    cropH = sw / destRatio
+  }
+  const cropX = (sw - cropW) / 2
+  const cropY = (sh - cropH) / 2
+  ctx.drawImage(img, cropX, cropY, cropW, cropH, dx, dy, dw, dh)
+}
+
 /** Composite all visible layers onto a fresh offscreen canvas. Used by the
  *  magic-wand and eyedropper paths to read pixels without going through the
  *  full export pipeline. */
-export function compositeDocToCanvas(
+export async function compositeDocToCanvas(
   layers: Layer[],
   getRasterCanvas: (id: string) => HTMLCanvasElement,
   width: number,
   height: number
-): HTMLCanvasElement {
+): Promise<HTMLCanvasElement> {
   const out = document.createElement("canvas")
   out.width = width
   out.height = height
@@ -28,7 +60,14 @@ export function compositeDocToCanvas(
       ctx.rect(l.crop.x, l.crop.y, l.crop.width, l.crop.height)
       ctx.clip()
     }
-    if (l.kind === "raster") {
+    if (l.kind === "image" && l.src) {
+      try {
+        const img = await loadImage(l.src)
+        drawImageCover(ctx, img, 0, 0, l.width, l.height)
+      } catch {
+        // skip
+      }
+    } else if (l.kind === "raster") {
       const rc = getRasterCanvas(l.id)
       if (rc.width > 0 && rc.height > 0) {
         try {
@@ -74,7 +113,7 @@ export function compositeDocToCanvas(
 /** Magic-wand flood fill. Composites the doc, samples the start pixel, then
  *  scan-line floods all pixels within `tolerance` (Euclidean RGB distance).
  *  Returns a translucent-blue overlay PNG of the masked region. */
-export function floodFillMask(
+export async function floodFillMask(
   layers: Layer[],
   getRasterCanvas: (id: string) => HTMLCanvasElement,
   startX: number,
@@ -82,8 +121,13 @@ export function floodFillMask(
   tolerance: number,
   DOC_W: number,
   DOC_H: number
-): { dataUrl: string; width: number; height: number } | null {
-  const composite = compositeDocToCanvas(layers, getRasterCanvas, DOC_W, DOC_H)
+): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  const composite = await compositeDocToCanvas(
+    layers,
+    getRasterCanvas,
+    DOC_W,
+    DOC_H
+  )
   const ctx = composite.getContext("2d", { willReadFrequently: true })
   if (!ctx) return null
   let img: ImageData
@@ -99,32 +143,46 @@ export function floodFillMask(
   const r0 = data[idx0]!
   const g0 = data[idx0 + 1]!
   const b0 = data[idx0 + 2]!
+  const a0 = data[idx0 + 3]!
   const tol2 = tolerance * tolerance
   const mask = new Uint8Array(DOC_W * DOC_H)
+  // Compare alpha as a 4th channel so transparent regions only match other
+  // transparent regions (and don't bleed across an image's alpha boundary
+  // because the underlying RGB happens to match).
   const near = (
     d: Uint8ClampedArray,
     x: number,
     y: number,
     rr: number,
     gg: number,
-    bb: number
+    bb: number,
+    aa: number
   ) => {
     const idx = (y * DOC_W + x) * 4
     const dr = d[idx]! - rr
     const dg = d[idx + 1]! - gg
     const db = d[idx + 2]! - bb
-    return dr * dr + dg * dg + db * db <= tol2
+    const da = d[idx + 3]! - aa
+    return dr * dr + dg * dg + db * db + da * da <= tol2
   }
   const stack: number[] = [startX, startY]
   while (stack.length) {
     const y = stack.pop()!
     const x = stack.pop()!
     let lx = x
-    while (lx >= 0 && !mask[y * DOC_W + lx] && near(data, lx, y, r0, g0, b0))
+    while (
+      lx >= 0 &&
+      !mask[y * DOC_W + lx] &&
+      near(data, lx, y, r0, g0, b0, a0)
+    )
       lx--
     lx++
     let rx = x
-    while (rx < DOC_W && !mask[y * DOC_W + rx] && near(data, rx, y, r0, g0, b0))
+    while (
+      rx < DOC_W &&
+      !mask[y * DOC_W + rx] &&
+      near(data, rx, y, r0, g0, b0, a0)
+    )
       rx++
     rx--
     for (let i = lx; i <= rx; i++) {
@@ -136,7 +194,7 @@ export function floodFillMask(
       while (i <= rx) {
         while (
           i <= rx &&
-          (mask[yy * DOC_W + i] || !near(data, i, yy, r0, g0, b0))
+          (mask[yy * DOC_W + i] || !near(data, i, yy, r0, g0, b0, a0))
         )
           i++
         if (i > rx) break
@@ -144,7 +202,7 @@ export function floodFillMask(
         while (
           i <= rx &&
           !mask[yy * DOC_W + i] &&
-          near(data, i, yy, r0, g0, b0)
+          near(data, i, yy, r0, g0, b0, a0)
         )
           i++
         stack.push(segStart, yy)
@@ -223,7 +281,12 @@ export async function extractUnderMask(
   DOC_W: number,
   DOC_H: number
 ): Promise<string | null> {
-  const composite = compositeDocToCanvas(layers, getRasterCanvas, DOC_W, DOC_H)
+  const composite = await compositeDocToCanvas(
+    layers,
+    getRasterCanvas,
+    DOC_W,
+    DOC_H
+  )
   const out = document.createElement("canvas")
   out.width = DOC_W
   out.height = DOC_H

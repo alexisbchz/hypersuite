@@ -308,7 +308,7 @@ export function useCanvasPointer(opts: {
       if (tool === "wand") {
         if (docX < 0 || docX > DOC_W || docY < 0 || docY > DOC_H) return
         e.preventDefault()
-        const mask = floodFillMask(
+        void floodFillMask(
           layers,
           getRasterCanvas,
           Math.round(docX),
@@ -316,8 +316,7 @@ export function useCanvasPointer(opts: {
           wandTolerance,
           DOC_W,
           DOC_H
-        )
-        setPixelMask(mask)
+        ).then((mask) => setPixelMask(mask))
         return
       }
 
