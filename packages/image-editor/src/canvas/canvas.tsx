@@ -882,6 +882,24 @@ export function Canvas() {
             )
           })()}
         {zoomDrag && <ZoomRect drag={zoomDrag} scale={scale} />}
+        {cursor &&
+          (tool === "brush" ||
+            tool === "pencil" ||
+            tool === "eraser" ||
+            tool === "refine") && (
+            <BrushCursor
+              x={cursor.x}
+              y={cursor.y}
+              size={brushSize}
+              scale={scale}
+              tone={
+                tool === "eraser" ||
+                (tool === "refine" && refineMode === "erase")
+                  ? "subtract"
+                  : "add"
+              }
+            />
+          )}
         {pixelMask && tool === "wand" && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -910,6 +928,61 @@ export function Canvas() {
         <RulerBadge zoom={zoom} cursor={cursor} docW={DOC_W} docH={DOC_H} />
       )}
     </div>
+  )
+}
+
+/** Hover preview ring that follows the cursor for brush-like tools so the
+ *  user can see exactly how big a stroke will be. Tone "add" matches the
+ *  default brush/pencil/refine-restore (white ring on black halo); tone
+ *  "subtract" matches eraser/refine-erase (red-ish). The ring's stroke
+ *  width is counter-scaled so it stays 1 doc-px regardless of zoom. */
+function BrushCursor({
+  x,
+  y,
+  size,
+  scale,
+  tone,
+}: {
+  x: number
+  y: number
+  size: number
+  scale: number
+  tone: "add" | "subtract"
+}) {
+  const r = Math.max(1, size / 2)
+  const inv = 1 / Math.max(scale, 0.001)
+  const stroke = tone === "subtract" ? "#ef4444" : "#ffffff"
+  const halo = tone === "subtract" ? "#7f1d1d" : "#000000"
+  return (
+    <svg
+      aria-hidden
+      className="pointer-events-none absolute"
+      style={{
+        left: x - r - 1,
+        top: y - r - 1,
+        width: r * 2 + 2,
+        height: r * 2 + 2,
+        overflow: "visible",
+      }}
+    >
+      <circle
+        cx={r + 1}
+        cy={r + 1}
+        r={r}
+        fill="none"
+        stroke={halo}
+        strokeWidth={inv * 2}
+        opacity={0.6}
+      />
+      <circle
+        cx={r + 1}
+        cy={r + 1}
+        r={r}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={inv}
+      />
+    </svg>
   )
 }
 
