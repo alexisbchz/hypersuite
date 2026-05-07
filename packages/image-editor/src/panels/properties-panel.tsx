@@ -72,6 +72,8 @@ export function PropertiesPanel() {
     setWandTolerance,
     pixelMask,
     eraseUnderMask,
+    invertMask,
+    extractMaskToLayer,
     setPixelMask,
   } = useEditor()
   const layer = layers.find((l) => l.id === selectedId) ?? null
@@ -199,6 +201,34 @@ export function PropertiesPanel() {
                 : "Click on the canvas to flood-fill a selection mask."}
             </p>
             <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  void extractMaskToLayer()
+                }}
+                disabled={!pixelMask}
+                className={cn(
+                  "h-7 w-full rounded-md border border-border text-xs",
+                  pixelMask
+                    ? "bg-foreground text-background hover:bg-foreground/90"
+                    : "pointer-events-none opacity-40"
+                )}
+              >
+                Extract to new layer
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void invertMask()
+                }}
+                disabled={!pixelMask}
+                className={cn(
+                  "h-7 w-full rounded-md border border-border text-xs hover:bg-muted",
+                  !pixelMask && "pointer-events-none opacity-40"
+                )}
+              >
+                Invert mask
+              </button>
               <button
                 type="button"
                 onClick={() => {

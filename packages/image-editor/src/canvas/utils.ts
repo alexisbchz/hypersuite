@@ -173,6 +173,84 @@ export function floodFillMask(
   }
 }
 
+/** Invert a wand-mask overlay PNG: pixels currently masked become unmasked
+ *  and vice versa. Used for "select inverse" on the magic-wand selection. */
+export async function invertMaskOverlay(mask: {
+  dataUrl: string
+  width: number
+  height: number
+}): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  const img = await loadImage(mask.dataUrl)
+  const canvas = document.createElement("canvas")
+  canvas.width = mask.width
+  canvas.height = mask.height
+  const ctx = canvas.getContext("2d")
+  if (!ctx) return null
+  ctx.drawImage(img, 0, 0, mask.width, mask.height)
+  let pix: ImageData
+  try {
+    pix = ctx.getImageData(0, 0, mask.width, mask.height)
+  } catch {
+    return null
+  }
+  const data = pix.data
+  for (let i = 0; i < mask.width * mask.height; i++) {
+    const a = data[i * 4 + 3]!
+    if (a > 0) {
+      data[i * 4 + 3] = 0
+    } else {
+      data[i * 4] = 79
+      data[i * 4 + 1] = 122
+      data[i * 4 + 2] = 255
+      data[i * 4 + 3] = 110
+    }
+  }
+  ctx.putImageData(pix, 0, 0)
+  return {
+    dataUrl: canvas.toDataURL("image/png"),
+    width: mask.width,
+    height: mask.height,
+  }
+}
+
+/** Composite all visible layers, then keep only pixels under the wand mask
+ *  (alpha > 0). Returns a PNG dataURL sized to the doc, suitable for the
+ *  rasterDataUrl of a new raster layer. */
+export async function extractUnderMask(
+  layers: Layer[],
+  getRasterCanvas: (id: string) => HTMLCanvasElement,
+  mask: { dataUrl: string; width: number; height: number },
+  DOC_W: number,
+  DOC_H: number
+): Promise<string | null> {
+  const composite = compositeDocToCanvas(layers, getRasterCanvas, DOC_W, DOC_H)
+  const out = document.createElement("canvas")
+  out.width = DOC_W
+  out.height = DOC_H
+  const ctx = out.getContext("2d")
+  if (!ctx) return null
+  ctx.drawImage(composite, 0, 0)
+  const maskImg = await loadImage(mask.dataUrl)
+  ctx.save()
+  ctx.globalCompositeOperation = "destination-in"
+  ctx.drawImage(maskImg, 0, 0, DOC_W, DOC_H)
+  ctx.restore()
+  try {
+    return out.toDataURL("image/png")
+  } catch {
+    return null
+  }
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error(`image load failed: ${src}`))
+    img.src = src
+  })
+}
+
 /** Paint a stroke (pencil / brush / eraser) onto a 2d context. The eraser
  *  uses destination-out compositing; brush adds shadow blur for soft edges. */
 export function applyStroke(

@@ -36,6 +36,7 @@ import {
   pathBoundsUnion,
 } from "../lib/geometry"
 import type { Anchor, Layer, ShapeVariant, ToolId } from "../lib/types"
+import { extractUnderMask, invertMaskOverlay } from "../canvas/utils"
 
 const HISTORY_LIMIT = 100
 
@@ -152,6 +153,11 @@ type EditorState = {
   /** Erase pixels in the active raster layer that fall under the current
    *  pixel mask. Returns true if applied. */
   eraseUnderMask: () => Promise<boolean>
+  /** Invert the wand mask (select inverse). */
+  invertMask: () => Promise<boolean>
+  /** Composite the doc, copy pixels under the mask into a new raster
+   *  layer above all others, and clear the mask. Returns the new id. */
+  extractMaskToLayer: () => Promise<string | null>
 
   commit: () => void
   undo: () => void
@@ -759,6 +765,64 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     return true
   }, [pixelMask, selectedIds, doc.layers])
 
+  const invertMask = useCallback(async () => {
+    if (!pixelMask) return false
+    const next = await invertMaskOverlay(pixelMask)
+    if (!next) return false
+    setPixelMask(next)
+    return true
+  }, [pixelMask])
+
+  const extractMaskToLayer = useCallback(async () => {
+    if (!pixelMask) return null
+    const w = docSettings.width
+    const h = docSettings.height
+    const dataUrl = await extractUnderMask(
+      doc.layers,
+      getRasterCanvas,
+      pixelMask,
+      w,
+      h
+    )
+    if (!dataUrl) return null
+    const id = `raster-${Date.now()}`
+    const canvas = document.createElement("canvas")
+    canvas.width = w
+    canvas.height = h
+    rasterCanvasRef.current.set(id, canvas)
+    // Pre-paint the canvas so subsequent strokes work without a re-load.
+    const cctx = canvas.getContext("2d")
+    if (cctx) {
+      try {
+        const img = await loadImage(dataUrl)
+        cctx.drawImage(img, 0, 0, w, h)
+      } catch {
+        // ignore — rasterDataUrl will still hydrate it on next render
+      }
+    }
+    const layer: Layer = {
+      id,
+      name: "Extract",
+      kind: "raster",
+      visible: true,
+      locked: false,
+      opacity: 100,
+      blendMode: "normal",
+      x: 0,
+      y: 0,
+      width: w,
+      height: h,
+      rotation: 0,
+      rasterDataUrl: dataUrl,
+      rasterWidth: w,
+      rasterHeight: h,
+    }
+    apply((ls) => [layer, ...ls])
+    setSelectedIds([id])
+    setPixelMask(null)
+    return id
+  }, [apply, doc.layers, docSettings.height, docSettings.width, getRasterCanvas, pixelMask])
+
   const commitRaster = useCallback((id: string) => {
     const canvas = rasterCanvasRef.current.get(id)
     if (!canvas) return
@@ -1259,6 +1323,8 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       pixelMask,
       setPixelMask,
       eraseUnderMask,
+      invertMask,
+      extractMaskToLayer,
       zoom,
       setZoom,
       panX,
@@ -1341,6 +1407,8 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       wandTolerance,
       pixelMask,
       eraseUnderMask,
+      invertMask,
+      extractMaskToLayer,
       setZoom,
       setPan,
       resetView,
