@@ -15,7 +15,11 @@ export const DEFAULT_TRACK_HEIGHT = 96
 
 export function makeDefaultTrack(index: number): Track {
   return {
-    id: crypto.randomUUID(),
+    // Deterministic id for the default tracks so SSR + client first render
+    // produce identical markup (no hydration mismatch on `data-track-id`).
+    // Tracks added at runtime use crypto.randomUUID() — that path only ever
+    // runs in the browser.
+    id: `default-track-${index}`,
     name: `Track ${index + 1}`,
     muted: false,
     soloed: false,
@@ -28,7 +32,7 @@ export function makeDefaultTrack(index: number): Track {
 
 export function makeDefaultProject(): Project {
   return {
-    id: crypto.randomUUID(),
+    id: "default-project",
     name: "Untitled project",
     sampleRate: DEFAULT_SAMPLE_RATE,
     bitDepth: 16,
