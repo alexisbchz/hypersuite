@@ -412,6 +412,37 @@ export async function invertMaskOverlay(
   }
 }
 
+/** Promote the mask overlay to a binary alpha buffer: every selected pixel
+ *  (alpha > 0) becomes fully opaque, everything else is fully transparent.
+ *  The wand stores its overlay with alpha 110 for the body and 55 for the
+ *  anti-aliased rim so it renders as a translucent blue selection — but
+ *  feeding that directly into a `destination-out` erase only partially
+ *  removes pixels (the rim drops to ~78% alpha, the body to ~57%). Erase /
+ *  cut paths binarize first so a selected pixel is removed entirely. */
+export async function binarizeMaskCanvas(
+  mask: PixelMask
+): Promise<HTMLCanvasElement | null> {
+  const img = await loadImage(mask.dataUrl)
+  const canvas = document.createElement("canvas")
+  canvas.width = mask.width
+  canvas.height = mask.height
+  const ctx = canvas.getContext("2d")
+  if (!ctx) return null
+  ctx.drawImage(img, 0, 0, mask.width, mask.height)
+  let pix: ImageData
+  try {
+    pix = ctx.getImageData(0, 0, mask.width, mask.height)
+  } catch {
+    return null
+  }
+  const data = pix.data
+  for (let i = 0; i < mask.width * mask.height; i++) {
+    data[i * 4 + 3] = data[i * 4 + 3]! > 0 ? 255 : 0
+  }
+  ctx.putImageData(pix, 0, 0)
+  return canvas
+}
+
 /** Composite all visible layers, then keep only pixels under the wand mask
  *  (alpha > 0). Returns a PNG dataURL sized to the doc, suitable for the
  *  rasterDataUrl of a new raster layer. */
@@ -444,6 +475,31 @@ export async function extractUnderMask(
   } catch {
     return null
   }
+}
+
+/** Compose a masked raster: paint `source` then keep only pixels under
+ *  the white/opaque region of `mask`. The output is what the user
+ *  perceives as "the layer pixels"; we cache it on the layer's offscreen
+ *  canvas so wand / export / eyedropper read the composed result without
+ *  knowing about the mask. */
+export function composeMasked(
+  source: CanvasImageSource,
+  mask: CanvasImageSource,
+  width: number,
+  height: number,
+  out?: HTMLCanvasElement
+): HTMLCanvasElement {
+  const c = out ?? document.createElement("canvas")
+  c.width = width
+  c.height = height
+  const ctx = c.getContext("2d")
+  if (!ctx) return c
+  ctx.clearRect(0, 0, width, height)
+  ctx.drawImage(source, 0, 0, width, height)
+  ctx.globalCompositeOperation = "destination-in"
+  ctx.drawImage(mask, 0, 0, width, height)
+  ctx.globalCompositeOperation = "source-over"
+  return c
 }
 
 export function loadImage(src: string): Promise<HTMLImageElement> {

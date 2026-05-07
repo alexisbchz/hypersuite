@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react"
 import { useEditor } from "../editor"
 import type { Layer } from "../lib/types"
 import type { SpacingGuides } from "../lib/geometry"
+import { composeMasked } from "./utils"
 
 /** Hosts the offscreen canvas backing a raster (brush/pencil) layer.
  *  Re-attaches the live canvas element to the host div whenever the layer
@@ -41,14 +42,42 @@ export function RasterLayerView({
     if (host && canvas.parentElement !== host) {
       host.replaceChildren(canvas)
     }
+    // For non-destructively-masked rasters (Remove background → refine
+    // flow), the live canvas pixels are `source × mask`. The cache key is
+    // the union of both fields so a stroke that only touches the mask
+    // still triggers a recompose.
+    const isMasked =
+      typeof layer.sourceDataUrl === "string" &&
+      typeof layer.maskDataUrl === "string"
     const applied = (canvas as unknown as { __applied?: string }).__applied
-    const target = layer.rasterDataUrl ?? ""
+    const target = isMasked
+      ? `${layer.sourceDataUrl}|${layer.maskDataUrl}`
+      : (layer.rasterDataUrl ?? "")
     if (applied !== target) {
       const ctx = canvas.getContext("2d")
       if (ctx) {
         if (!target) {
           ctx.clearRect(0, 0, canvas.width, canvas.height)
           ;(canvas as unknown as { __applied?: string }).__applied = ""
+        } else if (isMasked) {
+          let cancelled = false
+          const sImg = new window.Image()
+          const mImg = new window.Image()
+          let loaded = 0
+          const tryDraw = () => {
+            if (cancelled) return
+            loaded++
+            if (loaded < 2) return
+            composeMasked(sImg, mImg, canvas.width, canvas.height, canvas)
+            ;(canvas as unknown as { __applied?: string }).__applied = target
+          }
+          sImg.onload = tryDraw
+          mImg.onload = tryDraw
+          sImg.src = layer.sourceDataUrl!
+          mImg.src = layer.maskDataUrl!
+          return () => {
+            cancelled = true
+          }
         } else {
           const img = new window.Image()
           img.onload = () => {
@@ -63,6 +92,8 @@ export function RasterLayerView({
   }, [
     layer.id,
     layer.rasterDataUrl,
+    layer.sourceDataUrl,
+    layer.maskDataUrl,
     layer.rasterWidth,
     layer.rasterHeight,
     layer.width,

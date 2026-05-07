@@ -12,6 +12,7 @@ import {
   type WandSampleSize,
 } from "../utils"
 import type { Anchor, Layer, ShapeVariant, ToolId } from "../../lib/types"
+import type { MaskStrokeState } from "./use-mask-stroke"
 import type {
   MarqueeState,
   ShapeDrawState,
@@ -44,10 +45,12 @@ export function useCanvasPointer(opts: {
   wandSampleAllLayers: boolean
   wandMode: WandMaskMode
   pixelMask: PixelMask | null
+  refineMode: "restore" | "erase"
   penAnchors: Anchor[]
   startPan: (e: React.PointerEvent) => void
   startShapeDraw: (state: ShapeDrawState, layerId: string) => void
   startStroke: (state: StrokeState) => void
+  startMaskStroke: (state: MaskStrokeState) => void
   startZoomDrag: (state: ZoomDragState) => void
   startMarquee: (state: MarqueeState) => void
   setPenAnchors: React.Dispatch<React.SetStateAction<Anchor[]>>
@@ -102,10 +105,12 @@ export function useCanvasPointer(opts: {
     wandSampleAllLayers,
     wandMode,
     pixelMask,
+    refineMode,
     penAnchors,
     startPan,
     startShapeDraw,
     startStroke,
+    startMaskStroke,
     startZoomDrag,
     startMarquee,
     setPenAnchors,
@@ -307,6 +312,33 @@ export function useCanvasPointer(opts: {
         return
       }
 
+      if (tool === "refine") {
+        if (docX < 0 || docX > DOC_W || docY < 0 || docY > DOC_H) return
+        // Refine paints into a layer's editable alpha mask. Pick the
+        // selected masked-raster layer; bail if none.
+        const target =
+          selectedIds.length === 1
+            ? layers.find((l) => l.id === selectedIds[0])
+            : layers.find((l) => l.maskDataUrl && l.kind === "raster")
+        if (!target) return
+        if (!target.maskDataUrl) return
+        if (target.locked) return
+        e.preventDefault()
+        // Photoshop convention: hold Alt to flip the brush direction for
+        // one stroke without changing the panel toggle.
+        const effectiveMode: "restore" | "erase" = e.altKey
+          ? refineMode === "restore"
+            ? "erase"
+            : "restore"
+          : refineMode
+        startMaskStroke({
+          pointerId: e.pointerId,
+          layerId: target.id,
+          mode: effectiveMode,
+        })
+        return
+      }
+
       if (tool === "picker") {
         if (docX < 0 || docX > DOC_W || docY < 0 || docY > DOC_H) return
         e.preventDefault()
@@ -424,8 +456,10 @@ export function useCanvasPointer(opts: {
       wandMode,
       pixelMask,
       setPixelMask,
+      refineMode,
       startShapeDraw,
       startStroke,
+      startMaskStroke,
       startZoomDrag,
       startMarquee,
       setPenAnchors,

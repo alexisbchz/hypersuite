@@ -125,7 +125,8 @@ export const DEFAULT_DOC_H = 800
 
 /** Tools whose clicks must reach the container handler even when they land
  *  on a layer (so the user can paint, draw shapes, drop anchors, place text
- *  on top of existing artwork, sample a color, or magic-wand a region). */
+ *  on top of existing artwork, sample a color, magic-wand a region, or
+ *  refine an AI bg-removal mask). */
 export const CANVAS_DRAW_TOOLS = new Set([
   "pencil",
   "brush",
@@ -135,6 +136,7 @@ export const CANVAS_DRAW_TOOLS = new Set([
   "text",
   "wand",
   "picker",
+  "refine",
 ])
 
 export const isCanvasDrawTool = (tool: string) => CANVAS_DRAW_TOOLS.has(tool)

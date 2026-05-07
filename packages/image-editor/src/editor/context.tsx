@@ -37,6 +37,7 @@ import {
 } from "../lib/geometry"
 import type { Anchor, Layer, ShapeVariant, ToolId } from "../lib/types"
 import {
+  binarizeMaskCanvas,
   drawImageCover,
   extractUnderMask,
   invertMaskOverlay,
@@ -44,6 +45,11 @@ import {
   type WandMaskMode,
   type WandSampleSize,
 } from "../canvas/utils"
+import {
+  BgRemovalAbortError,
+  removeBackground,
+  type BgRemovalProgress,
+} from "../lib/background-removal"
 
 const HISTORY_LIMIT = 100
 
@@ -174,6 +180,25 @@ type EditorState = {
    *  layer above all others, and clear the mask. Returns the new id. */
   extractMaskToLayer: () => Promise<string | null>
 
+  /** Per-layer-id progress while AI background removal is running. Empty
+   *  entry means the layer is idle. */
+  bgRemovalProgress: Record<string, BgRemovalProgress>
+  /** Run @imgly/background-removal on the layer in place. The image layer
+   *  is replaced by a transparent-bg raster; undo restores it. */
+  removeBackgroundFromLayer: (id: string) => Promise<boolean>
+
+  /** Direction of the Refine brush — "restore" paints opaque mask back,
+   *  "erase" punches holes. Alt at click flips this for one stroke. */
+  refineMode: "restore" | "erase"
+  setRefineMode: (m: "restore" | "erase") => void
+  /** Live offscreen canvas backing a layer's editable mask (lazy). */
+  getMaskCanvas: (id: string) => HTMLCanvasElement
+  /** Decode `maskDataUrl` into the mask canvas; idempotent. */
+  ensureMaskCanvas: (id: string) => Promise<HTMLCanvasElement | null>
+  /** Reset the mask back to "everything kept" — opaque white fill.
+   *  Useful as a panel "Reset mask" button after over-painting. */
+  resetMask: (id: string) => void
+
   commit: () => void
   undo: () => void
   redo: () => void
@@ -259,7 +284,18 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   const [wandSampleAllLayers, setWandSampleAllLayers] = useState(true)
   const [wandMode, setWandMode] = useState<WandMaskMode>("new")
   const [pixelMask, setPixelMask] = useState<PixelMask | null>(null)
+  const [bgRemovalProgress, setBgRemovalProgress] = useState<
+    Record<string, BgRemovalProgress>
+  >({})
+  const bgRemovalSeqRef = useRef(new Map<string, number>())
+  const bgRemovalAbortRef = useRef(new Map<string, AbortController>())
+  // Refine-mask brush direction. "restore" paints opaque pixels back into
+  // the mask; "erase" punches holes. Hold Alt while painting to flip.
+  const [refineMode, setRefineMode] = useState<"restore" | "erase">("restore")
   const rasterCanvasRef = useRef<Map<string, HTMLCanvasElement>>(new Map())
+  // Per-layer offscreen canvas holding the editable alpha mask. Lazily
+  // decoded from maskDataUrl on first refine interaction.
+  const maskCanvasRef = useRef<Map<string, HTMLCanvasElement>>(new Map())
   const hydratedRef = useRef(false)
 
   // Multi-tab state. The currently-active tab's data lives in the existing
@@ -707,6 +743,49 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     return c
   }, [])
 
+  /** Sync access to a layer's mask canvas. Returns a (possibly empty)
+   *  canvas — lazy decode happens via `ensureMaskCanvas`. */
+  const getMaskCanvas = useCallback((id: string) => {
+    let c = maskCanvasRef.current.get(id)
+    if (!c) {
+      c = document.createElement("canvas")
+      maskCanvasRef.current.set(id, c)
+    }
+    return c
+  }, [])
+
+  /** Decode `maskDataUrl` into the mask canvas for stroke editing. We
+   *  call this when entering Refine mode so the user's first stroke
+   *  paints into the right buffer. Cheap re-call: if the canvas already
+   *  matches the current dataURL, no work happens. */
+  const ensureMaskCanvas = useCallback(
+    async (id: string): Promise<HTMLCanvasElement | null> => {
+      const layer = doc.layers.find((l) => l.id === id)
+      if (!layer?.maskDataUrl) return null
+      const canvas = getMaskCanvas(id)
+      const applied = (canvas as unknown as { __appliedMask?: string })
+        .__appliedMask
+      if (applied === layer.maskDataUrl) return canvas
+      const img = await new Promise<HTMLImageElement | null>((resolve) => {
+        const i = new window.Image()
+        i.onload = () => resolve(i)
+        i.onerror = () => resolve(null)
+        i.src = layer.maskDataUrl!
+      })
+      if (!img) return null
+      canvas.width = layer.width
+      canvas.height = layer.height
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return null
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      ;(canvas as unknown as { __appliedMask?: string }).__appliedMask =
+        layer.maskDataUrl
+      return canvas
+    },
+    [doc.layers, getMaskCanvas]
+  )
+
   const addRaster = useCallback(
     (opts: { width?: number; height?: number }) => {
       const id = `raster-${Date.now()}`
@@ -782,7 +861,10 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     const ctx = canvas.getContext("2d")
     if (!ctx) return false
 
-    const mask = await loadImage(pixelMask.dataUrl)
+    // Binarize first — the overlay's translucent body/rim would only
+    // partially erase pixels under destination-out, leaving a faded rim.
+    const mask = await binarizeMaskCanvas(pixelMask)
+    if (!mask) return false
     const safeToDataURL = () => {
       try {
         return canvas!.toDataURL("image/png")
@@ -899,6 +981,204 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     setPixelMask(null)
     return id
   }, [apply, doc.layers, docSettings.height, docSettings.width, getRasterCanvas, pixelMask])
+
+  const removeBackgroundFromLayer = useCallback(
+    async (id: string): Promise<boolean> => {
+      const sel = doc.layers.find((l) => l.id === id)
+      if (!sel) return false
+      if (sel.locked) return false
+      if (sel.kind !== "image" && sel.kind !== "raster") return false
+
+      // Bump the per-layer sequence so an in-flight earlier run becomes
+      // stale even if it eventually resolves. Cancel its abort controller
+      // for good measure.
+      const seq = (bgRemovalSeqRef.current.get(id) ?? 0) + 1
+      bgRemovalSeqRef.current.set(id, seq)
+      bgRemovalAbortRef.current.get(id)?.abort()
+      const abort = new AbortController()
+      bgRemovalAbortRef.current.set(id, abort)
+
+      // Seed progress synchronously so the UI flips into busy state on the
+      // current frame — without this, the panel button + canvas overlay
+      // wouldn't paint until the dynamic import + first model fetch
+      // resolves (several seconds on first run, feels frozen).
+      setBgRemovalProgress((prev) => ({
+        ...prev,
+        [id]: { phase: "downloading", pct: 0 },
+      }))
+
+      // Build a Blob source. Image layers ship `src` as a blob: URL we can
+      // fetch; raster layers expose pixels via the offscreen canvas.
+      let source: Blob
+      try {
+        if (sel.kind === "image" && sel.src) {
+          const res = await fetch(sel.src)
+          source = await res.blob()
+        } else if (sel.kind === "raster") {
+          const canvas = rasterCanvasRef.current.get(sel.id)
+          if (!canvas || canvas.width === 0) return false
+          source = await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob((b) => {
+              if (b) resolve(b)
+              else reject(new Error("canvas.toBlob returned null"))
+            }, "image/png")
+          })
+        } else {
+          setBgRemovalProgress((prev) => {
+            if (!(id in prev)) return prev
+            const { [id]: _, ...rest } = prev
+            return rest
+          })
+          return false
+        }
+      } catch {
+        setBgRemovalProgress((prev) => {
+          if (!(id in prev)) return prev
+          const { [id]: _, ...rest } = prev
+          return rest
+        })
+        bgRemovalAbortRef.current.delete(id)
+        return false
+      }
+
+      let result: Blob
+      try {
+        result = await removeBackground(
+          source,
+          (p) =>
+            setBgRemovalProgress((prev) => ({ ...prev, [id]: p })),
+          abort.signal
+        )
+      } catch (err) {
+        // Aborted or model failed — just clean up and bail. Distinct ids
+        // run in parallel so we don't share state across them.
+        if (!(err instanceof BgRemovalAbortError)) {
+          // eslint-disable-next-line no-console
+          console.error("background removal failed", err)
+        }
+        setBgRemovalProgress((prev) => {
+          if (!(id in prev)) return prev
+          const { [id]: _, ...rest } = prev
+          return rest
+        })
+        bgRemovalAbortRef.current.delete(id)
+        return false
+      }
+
+      const blobToDataUrl = (b: Blob) =>
+        new Promise<string | null>((resolve) => {
+          const r = new FileReader()
+          r.onload = () =>
+            resolve(typeof r.result === "string" ? r.result : null)
+          r.onerror = () => resolve(null)
+          r.readAsDataURL(b)
+        })
+
+      // Capture the original full-RGB pixels and the imgly result as
+      // separate dataURLs. The imgly output's alpha channel IS the mask
+      // (destination-in only reads alpha), so we can use the raw blob as
+      // maskDataUrl without extracting it into a grayscale buffer.
+      const [sourceDataUrl, maskDataUrl] = await Promise.all([
+        blobToDataUrl(source),
+        blobToDataUrl(result),
+      ])
+
+      // Clear progress regardless; commit only if still current.
+      setBgRemovalProgress((prev) => {
+        if (!(id in prev)) return prev
+        const { [id]: _, ...rest } = prev
+        return rest
+      })
+      bgRemovalAbortRef.current.delete(id)
+
+      if (!sourceDataUrl || !maskDataUrl) return false
+      if (bgRemovalSeqRef.current.get(id) !== seq) return false
+
+      const layerW = sel.width
+      const layerH = sel.height
+      setDoc((d) => {
+        // Re-validate inside the updater so a delete-during-run or a
+        // superseding remove drops the result cleanly. Note: React 19
+        // strict mode runs this updater twice and defers it past the
+        // surrounding async code, so we can't communicate commit status
+        // back via a closure flag — the outer guard above already proved
+        // eligibility, and this updater simply no-ops if state moved on.
+        if (bgRemovalSeqRef.current.get(id) !== seq) return d
+        const exists = d.layers.some((l) => l.id === id)
+        if (!exists) return d
+
+        // Drop any stale __applied marker so RasterLayerView's effect
+        // recomposes source × mask into the live canvas on next paint.
+        const canvas = rasterCanvasRef.current.get(id)
+        if (canvas) {
+          ;(canvas as unknown as { __applied?: string }).__applied = ""
+        }
+
+        const nextLayers = d.layers.map((l) => {
+          if (l.id !== id) return l
+          // For image layers we flip kind and clear src; for rasters we
+          // preserve everything else and just install the new mask.
+          if (l.kind === "image") {
+            return {
+              ...l,
+              kind: "raster" as const,
+              src: undefined,
+              sourceDataUrl,
+              maskDataUrl,
+              rasterDataUrl: null,
+              rasterWidth: layerW,
+              rasterHeight: layerH,
+            }
+          }
+          return {
+            ...l,
+            sourceDataUrl,
+            maskDataUrl,
+            rasterDataUrl: null,
+            rasterWidth: layerW,
+            rasterHeight: layerH,
+          }
+        })
+        return {
+          layers: nextLayers,
+          past: [...d.past, d.layers].slice(-HISTORY_LIMIT),
+          future: [],
+        }
+      })
+      // Auto-engage the Refine tool — the outer guards (seq match, layer
+      // existed at fetch time) already proved this run is current.
+      // Worst case: the layer was deleted between the guard and now,
+      // and the user lands in Refine with nothing to refine — the panel
+      // just shows the empty-state message.
+      setSelectedIds([id])
+      setTool("refine")
+      return true
+    },
+    [doc.layers]
+  )
+
+  const resetMask = useCallback(
+    (id: string) => {
+      const layer = doc.layers.find((l) => l.id === id)
+      if (!layer?.sourceDataUrl) return
+      // Build an all-white mask sized to the layer — keeps every pixel.
+      const c = document.createElement("canvas")
+      c.width = layer.width
+      c.height = layer.height
+      const ctx = c.getContext("2d")
+      if (!ctx) return
+      ctx.fillStyle = "#ffffff"
+      ctx.fillRect(0, 0, c.width, c.height)
+      const dataUrl = c.toDataURL("image/png")
+      // Drop the cached mask canvas so the next refine stroke decodes
+      // the new "all white" buffer rather than over-painting the old one.
+      maskCanvasRef.current.delete(id)
+      apply((ls) =>
+        ls.map((l) => (l.id === id ? { ...l, maskDataUrl: dataUrl } : l))
+      )
+    },
+    [apply, doc.layers]
+  )
 
   const commitRaster = useCallback((id: string) => {
     const canvas = rasterCanvasRef.current.get(id)
@@ -1412,6 +1692,13 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       eraseUnderMask,
       invertMask,
       extractMaskToLayer,
+      bgRemovalProgress,
+      removeBackgroundFromLayer,
+      refineMode,
+      setRefineMode,
+      getMaskCanvas,
+      ensureMaskCanvas,
+      resetMask,
       zoom,
       setZoom,
       panX,
@@ -1501,6 +1788,12 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       eraseUnderMask,
       invertMask,
       extractMaskToLayer,
+      bgRemovalProgress,
+      removeBackgroundFromLayer,
+      refineMode,
+      getMaskCanvas,
+      ensureMaskCanvas,
+      resetMask,
       setZoom,
       setPan,
       resetView,

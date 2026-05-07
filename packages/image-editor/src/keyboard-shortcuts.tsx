@@ -18,6 +18,7 @@ const TOOL_KEYS: Record<string, ToolId> = {
   c: "crop",
   i: "picker",
   w: "wand",
+  r: "refine",
   z: "zoom",
 }
 
@@ -79,6 +80,7 @@ export const SHORTCUTS: ShortcutGroup[] = [
       { keys: "C", label: "Crop" },
       { keys: "I", label: "Picker" },
       { keys: "W", label: "Wand" },
+      { keys: "R", label: "Refine mask" },
       { keys: "Z", label: "Zoom" },
     ],
   },

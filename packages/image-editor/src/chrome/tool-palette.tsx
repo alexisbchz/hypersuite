@@ -12,6 +12,7 @@ import {
   Move02Icon,
   PencilIcon,
   PenTool01Icon,
+  SparklesIcon,
   Square01Icon,
   TextFontIcon,
   ViewIcon,
@@ -50,6 +51,7 @@ const BOTTOM: Tool[] = [
   { id: "crop", label: "Crop", shortcut: "C", icon: CropIcon },
   { id: "picker", label: "Color picker", shortcut: "I", icon: ColorPickerIcon },
   { id: "wand", label: "Magic wand", shortcut: "W", icon: MagicWand01Icon },
+  { id: "refine", label: "Refine mask", shortcut: "R", icon: SparklesIcon },
   { id: "zoom", label: "Zoom", shortcut: "Z", icon: ViewIcon },
 ]
 

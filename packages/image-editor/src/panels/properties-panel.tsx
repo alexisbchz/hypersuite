@@ -13,6 +13,7 @@ import {
   DistributeVerticalCenterIcon,
   CursorMagicSelectionIcon,
   Layers01Icon,
+  LoadingIcon,
   MagicWand01Icon,
   PaintBucketIcon,
   PathfinderIntersectIcon,
@@ -20,10 +21,16 @@ import {
   PathfinderUniteIcon,
   Rotate01Icon,
   Settings02Icon,
+  SparklesIcon,
 } from "@hugeicons/core-free-icons"
 
 import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@workspace/ui/components/input-group"
 import { Label } from "@workspace/ui/components/label"
 import { Slider } from "@workspace/ui/components/slider"
 import { Switch } from "@workspace/ui/components/switch"
@@ -34,6 +41,7 @@ import {
 } from "@workspace/ui/components/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
 import type { WandMaskMode, WandSampleSize } from "../canvas/utils"
+import type { BgRemovalProgress } from "../lib/background-removal"
 import { ColorPicker } from "../pickers/color-picker"
 import { FontPicker } from "../pickers/font-picker"
 import { useEditor } from "../editor"
@@ -94,6 +102,12 @@ export function PropertiesPanel() {
     invertMask,
     extractMaskToLayer,
     setPixelMask,
+    bgRemovalProgress,
+    removeBackgroundFromLayer,
+    refineMode,
+    setRefineMode,
+    resetMask,
+    setTool,
   } = useEditor()
   const layer = layers.find((l) => l.id === selectedId) ?? null
 
@@ -105,7 +119,8 @@ export function PropertiesPanel() {
     tool === "brush" ||
     tool === "eraser" ||
     tool === "pen" ||
-    tool === "wand"
+    tool === "wand" ||
+    tool === "refine"
   ) {
     return (
       <div className="flex h-full flex-col">
@@ -121,30 +136,22 @@ export function PropertiesPanel() {
           <Section title="Shape" icon={PaintBucketIcon}>
             <Row label="Variant">
               <div className="flex gap-1">
-                <button
-                  type="button"
+                <Button
+                  variant={shapeVariant === "rect" ? "default" : "outline"}
+                  size="sm"
+                  className="flex-1"
                   onClick={() => setShapeVariant("rect")}
-                  className={cn(
-                    "h-7 flex-1 rounded-md border border-border text-xs",
-                    shapeVariant === "rect"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted"
-                  )}
                 >
                   Rectangle
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant={shapeVariant === "ellipse" ? "default" : "outline"}
+                  size="sm"
+                  className="flex-1"
                   onClick={() => setShapeVariant("ellipse")}
-                  className={cn(
-                    "h-7 flex-1 rounded-md border border-border text-xs",
-                    shapeVariant === "ellipse"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted"
-                  )}
                 >
                   Ellipse
-                </button>
+                </Button>
               </div>
             </Row>
             <Row label="Fill">
@@ -158,24 +165,26 @@ export function PropertiesPanel() {
             icon={PaintBucketIcon}
           >
             <Row label="Size">
-              <input
-                type="range"
+              <Slider
                 min={1}
                 max={120}
-                value={brushSize}
-                onChange={(e) => setBrushSize(Number(e.target.value))}
-                className="w-full"
+                value={[brushSize]}
+                onValueChange={(v) => {
+                  if (Array.isArray(v) && typeof v[0] === "number")
+                    setBrushSize(v[0])
+                }}
               />
             </Row>
             <Row label="Hardness">
-              <input
-                type="range"
+              <Slider
                 min={0}
                 max={1}
                 step={0.05}
-                value={brushHardness}
-                onChange={(e) => setBrushHardness(Number(e.target.value))}
-                className="w-full"
+                value={[brushHardness]}
+                onValueChange={(v) => {
+                  if (Array.isArray(v) && typeof v[0] === "number")
+                    setBrushHardness(v[0])
+                }}
               />
             </Row>
             {tool !== "eraser" && (
@@ -292,6 +301,24 @@ export function PropertiesPanel() {
               </Button>
             </Section>
           </>
+        )}
+        {tool === "refine" && (
+          <RefineToolSection
+            mode={refineMode}
+            setMode={setRefineMode}
+            brushSize={brushSize}
+            setBrushSize={setBrushSize}
+            brushHardness={brushHardness}
+            setBrushHardness={setBrushHardness}
+            hasMask={
+              !!layers.find((l) => l.id === selectedIds[0])?.maskDataUrl
+            }
+            onReset={() => {
+              const id = selectedIds[0]
+              if (id) resetMask(id)
+            }}
+            onDone={() => setTool("move")}
+          />
         )}
       </div>
     )
@@ -766,6 +793,14 @@ export function PropertiesPanel() {
         </Section>
 
         {(layer.kind === "image" || layer.kind === "raster") && (
+          <BgRemoveSection
+            layerId={layer.id}
+            progress={bgRemovalProgress[layer.id]}
+            onRun={() => void removeBackgroundFromLayer(layer.id)}
+          />
+        )}
+
+        {(layer.kind === "image" || layer.kind === "raster") && (
           <Section title="Adjustments" icon={MagicWand01Icon}>
             {(
               [
@@ -778,38 +813,32 @@ export function PropertiesPanel() {
               const val = layer.adjustments?.[key] ?? 0
               return (
                 <Row key={key} label={label}>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="range"
-                      min={min}
-                      max={max}
-                      value={val}
-                      onPointerDown={commit}
-                      onChange={(e) =>
-                        patch(layer.id, {
-                          adjustments: {
-                            ...(layer.adjustments ?? {}),
-                            [key]: Number(e.target.value),
-                          },
-                        })
-                      }
-                      className="min-w-0 flex-1"
-                    />
-                    <span className="w-10 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
-                      {val}
-                      {suffix}
-                    </span>
-                  </div>
+                  <SliderRow
+                    min={min}
+                    max={max}
+                    suffix={suffix}
+                    value={val}
+                    onCommit={commit}
+                    onChange={(v) =>
+                      patch(layer.id, {
+                        adjustments: {
+                          ...(layer.adjustments ?? {}),
+                          [key]: v,
+                        },
+                      })
+                    }
+                  />
                 </Row>
               )
             })}
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="xs"
+              className="self-start"
               onClick={() => setProp(layer.id, { adjustments: undefined })}
-              className="mt-1 self-start rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
             >
               Reset adjustments
-            </button>
+            </Button>
           </Section>
         )}
 
@@ -918,13 +947,14 @@ export function PropertiesPanel() {
           {(layer.filters?.sharpen ||
             layer.filters?.noise ||
             layer.filters?.grain) && (
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="xs"
+              className="self-start"
               onClick={() => setProp(layer.id, { filters: undefined })}
-              className="mt-1 self-start rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
             >
               Reset filters
-            </button>
+            </Button>
           )}
         </Section>
       </div>
@@ -983,23 +1013,29 @@ function NumField({
   suffix?: string
 }) {
   return (
-    <label className="group/field relative flex items-center rounded-md border border-border bg-background focus-within:border-ring">
-      <span className="inline-flex w-6 shrink-0 items-center justify-center text-[11px] text-muted-foreground">
+    <InputGroup className="h-7">
+      <InputGroupAddon
+        align="inline-start"
+        className="ps-2 text-[11px] text-muted-foreground"
+      >
         {label}
-      </span>
-      <input
+      </InputGroupAddon>
+      <InputGroupInput
         type="number"
         value={Math.round(value)}
         onFocus={onFocus}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="h-7 w-full bg-transparent pe-1 text-right text-xs tabular-nums outline-none"
+        onChange={(e) => onChange(Number(e.currentTarget.value))}
+        className="text-right text-xs tabular-nums"
       />
       {suffix && (
-        <span className="pe-1.5 text-[10px] text-muted-foreground">
+        <InputGroupAddon
+          align="inline-end"
+          className="pe-2 text-[10px] text-muted-foreground"
+        >
           {suffix}
-        </span>
+        </InputGroupAddon>
       )}
-    </label>
+    </InputGroup>
   )
 }
 
@@ -1023,14 +1059,15 @@ function SliderRow({
   const display = step < 1 ? value.toFixed(1) : Math.round(value)
   return (
     <div className="flex items-center gap-2">
-      <input
-        type="range"
+      <Slider
         min={min}
         max={max}
         step={step}
-        value={value}
+        value={[value]}
         onPointerDown={onCommit}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onValueChange={(v) => {
+          if (Array.isArray(v) && typeof v[0] === "number") onChange(v[0])
+        }}
         className="min-w-0 flex-1"
       />
       <span className="w-10 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
@@ -1193,6 +1230,154 @@ function ToggleRow({
         onCheckedChange={onChange}
       />
     </div>
+  )
+}
+
+function RefineToolSection({
+  mode,
+  setMode,
+  brushSize,
+  setBrushSize,
+  brushHardness,
+  setBrushHardness,
+  hasMask,
+  onReset,
+  onDone,
+}: {
+  mode: "restore" | "erase"
+  setMode: (m: "restore" | "erase") => void
+  brushSize: number
+  setBrushSize: (v: number) => void
+  brushHardness: number
+  setBrushHardness: (v: number) => void
+  hasMask: boolean
+  onReset: () => void
+  onDone: () => void
+}) {
+  return (
+    <Section title="Refine mask" icon={SparklesIcon}>
+      {!hasMask ? (
+        <p className="text-[11px] text-muted-foreground">
+          Run AI Remove background on an image or raster layer first — the
+          Refine brush touches up that mask.
+        </p>
+      ) : (
+        <>
+          <Row label="Brush">
+            <div
+              data-slot="button-group"
+              className="flex w-full overflow-hidden rounded-md border border-border"
+            >
+              <button
+                type="button"
+                aria-pressed={mode === "restore"}
+                onClick={() => setMode("restore")}
+                className={cn(
+                  "inline-flex h-7 flex-1 items-center justify-center text-xs transition-colors hover:bg-muted",
+                  mode === "restore"
+                    ? "bg-primary text-primary-foreground hover:bg-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Restore
+              </button>
+              <button
+                type="button"
+                aria-pressed={mode === "erase"}
+                onClick={() => setMode("erase")}
+                className={cn(
+                  "inline-flex h-7 flex-1 items-center justify-center border-l border-border text-xs transition-colors hover:bg-muted",
+                  mode === "erase"
+                    ? "bg-primary text-primary-foreground hover:bg-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Erase
+              </button>
+            </div>
+          </Row>
+          <Row label="Size">
+            <Slider
+              min={1}
+              max={120}
+              value={[brushSize]}
+              onValueChange={(v) => {
+                if (Array.isArray(v) && typeof v[0] === "number")
+                  setBrushSize(v[0])
+              }}
+            />
+          </Row>
+          <Row label="Hardness">
+            <Slider
+              min={0}
+              max={1}
+              step={0.05}
+              value={[brushHardness]}
+              onValueChange={(v) => {
+                if (Array.isArray(v) && typeof v[0] === "number")
+                  setBrushHardness(v[0])
+              }}
+            />
+          </Row>
+          <p className="text-[11px] text-muted-foreground">
+            Hold{" "}
+            <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">
+              Alt
+            </kbd>{" "}
+            while painting to flip the brush.
+          </p>
+          <div className="grid grid-cols-2 gap-1.5">
+            <Button variant="outline" size="sm" onClick={onReset}>
+              Reset mask
+            </Button>
+            <Button variant="default" size="sm" onClick={onDone}>
+              Done
+            </Button>
+          </div>
+        </>
+      )}
+    </Section>
+  )
+}
+
+function BgRemoveSection({
+  layerId,
+  progress,
+  onRun,
+}: {
+  layerId: string
+  progress: BgRemovalProgress | undefined
+  onRun: () => void
+}) {
+  const busy = progress !== undefined
+  const label = busy
+    ? progress.phase === "downloading"
+      ? `Downloading model… ${progress.pct}%`
+      : progress.pct > 0
+        ? `Removing background… ${progress.pct}%`
+        : "Removing background…"
+    : "Remove background"
+  return (
+    <Section title="AI" icon={SparklesIcon}>
+      <Button
+        key={layerId}
+        variant="default"
+        size="sm"
+        disabled={busy}
+        onClick={onRun}
+        className="w-full justify-center"
+      >
+        <HugeiconsIcon
+          icon={busy ? LoadingIcon : SparklesIcon}
+          className={cn(busy && "animate-spin")}
+        />
+        {label}
+      </Button>
+      <p className="text-[11px] text-muted-foreground">
+        Runs locally in your browser. The model (~40 MB) downloads once on
+        first use, then is cached.
+      </p>
+    </Section>
   )
 }
 

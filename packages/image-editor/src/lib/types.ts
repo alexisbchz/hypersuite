@@ -81,8 +81,20 @@ export type Layer = {
   pathStrokeWidth?: number
   /** Anchors in absolute doc coordinates (preferred over `path` for editable paths). */
   anchors?: Anchor[]
-  /** Stored as a PNG data URL, or null while empty. */
+  /** Stored as a PNG data URL, or null while empty.
+   *
+   *  When `sourceDataUrl` is also set on the layer, this field is a
+   *  *cache* of `source × mask` rebuilt on every mask edit — readers
+   *  (export, wand composite) can keep using it transparently. */
   rasterDataUrl?: string | null
+  /** Original full-RGB pixels for a non-destructively masked raster. Set
+   *  by AI background removal so the user can paint pixels back via the
+   *  Refine tool. PNG data URL. */
+  sourceDataUrl?: string | null
+  /** Editable alpha mask paired with `sourceDataUrl`. White/opaque pixels
+   *  are kept; black/transparent pixels are dropped from the composite.
+   *  PNG data URL. */
+  maskDataUrl?: string | null
   /** Pixel dimensions of the raster buffer (separate from layer size for resampling). */
   rasterWidth?: number
   rasterHeight?: number
@@ -109,3 +121,4 @@ export type ToolId =
   | "picker"
   | "wand"
   | "zoom"
+  | "refine"

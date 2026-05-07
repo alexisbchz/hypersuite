@@ -76,6 +76,8 @@ export function TopBar() {
     pushRecent,
     setProp,
     getRasterCanvas,
+    bgRemovalProgress,
+    removeBackgroundFromLayer,
   } = useEditor()
   const [exporting, setExporting] = useState<ExportFormat | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -360,6 +362,17 @@ export function TopBar() {
             render={<button className={triggerCls}>Image</button>}
           />
           <DropdownMenuContent align="start" className="min-w-52">
+            <DropdownMenuItem
+              onClick={() => sel && void removeBackgroundFromLayer(sel.id)}
+              disabled={
+                !sel ||
+                (sel.kind !== "image" && sel.kind !== "raster") ||
+                sel.locked ||
+                sel.id in bgRemovalProgress
+              }
+            >
+              Remove background…
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setShowDocument(true)}>
               Document settings…
             </DropdownMenuItem>

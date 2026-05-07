@@ -70,6 +70,18 @@ export async function saveHyperimg(opts: {
       assetsFolder.file(name, blob)
       stripped.rasterDataUrl = `assets/${name}`
     }
+    if (layer.sourceDataUrl && layer.sourceDataUrl.startsWith("data:")) {
+      const blob = dataUrlToBlob(layer.sourceDataUrl)
+      const name = `${layer.id}-source.png`
+      assetsFolder.file(name, blob)
+      stripped.sourceDataUrl = `assets/${name}`
+    }
+    if (layer.maskDataUrl && layer.maskDataUrl.startsWith("data:")) {
+      const blob = dataUrlToBlob(layer.maskDataUrl)
+      const name = `${layer.id}-mask.png`
+      assetsFolder.file(name, blob)
+      stripped.maskDataUrl = `assets/${name}`
+    }
     manifestLayers.push(stripped)
   }
 
@@ -110,21 +122,37 @@ export async function loadHyperimg(file: File): Promise<HyperimgSnapshot> {
         next.src = URL.createObjectURL(blob)
       }
     }
+    const inflateAsset = async (entryPath: string) => {
+      const entry = zip.file(entryPath)
+      if (!entry) return null
+      const blob = await entry.async("blob")
+      return new Promise<string>((resolve, reject) => {
+        const r = new FileReader()
+        r.onload = () => resolve(String(r.result))
+        r.onerror = () => reject(new Error("read failed"))
+        r.readAsDataURL(blob)
+      })
+    }
     if (
       typeof l.rasterDataUrl === "string" &&
       l.rasterDataUrl.startsWith("assets/")
     ) {
-      const entry = zip.file(l.rasterDataUrl)
-      if (entry) {
-        const blob = await entry.async("blob")
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const r = new FileReader()
-          r.onload = () => resolve(String(r.result))
-          r.onerror = () => reject(new Error("read failed"))
-          r.readAsDataURL(blob)
-        })
-        next.rasterDataUrl = dataUrl
-      }
+      const dataUrl = await inflateAsset(l.rasterDataUrl)
+      if (dataUrl) next.rasterDataUrl = dataUrl
+    }
+    if (
+      typeof l.sourceDataUrl === "string" &&
+      l.sourceDataUrl.startsWith("assets/")
+    ) {
+      const dataUrl = await inflateAsset(l.sourceDataUrl)
+      if (dataUrl) next.sourceDataUrl = dataUrl
+    }
+    if (
+      typeof l.maskDataUrl === "string" &&
+      l.maskDataUrl.startsWith("assets/")
+    ) {
+      const dataUrl = await inflateAsset(l.maskDataUrl)
+      if (dataUrl) next.maskDataUrl = dataUrl
     }
     layers.push(next)
   }
