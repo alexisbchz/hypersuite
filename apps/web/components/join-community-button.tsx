@@ -5,7 +5,7 @@ import { DiscordIcon } from "@/app/discord-icon"
 export function JoinCommunityButton({ className }: { className?: string }) {
   return (
     <a
-      href="https://discord.gg/UXJM9a2hqE"
+      href="https://discord.gg/kJ5rVuHtuB"
       className={cn(
         buttonVariants({ size: "lg" }),
         "gap-1 self-start text-[15px] no-underline",
