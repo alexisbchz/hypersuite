@@ -36,7 +36,7 @@ export const SHORTCUTS: ShortcutGroup[] = [
       { keys: "⌘A", label: "Select all" },
       { keys: "⌘G", label: "Group" },
       { keys: "⌘⇧G", label: "Ungroup" },
-      { keys: "⌫ / Delete", label: "Delete" },
+      { keys: "⌫ / Delete", label: "Delete layer (or erase wand selection)" },
       { keys: "Esc", label: "Deselect" },
     ],
   },
@@ -181,6 +181,14 @@ export function KeyboardShortcuts() {
       }
 
       if (e.key === "Delete" || e.key === "Backspace") {
+        // Photoshop: Delete with an active selection erases pixels under
+        // the marching ants — not the layer. Pixel-mask wins over layer
+        // delete so the wand workflow stays uninterrupted.
+        if (editor.pixelMask) {
+          e.preventDefault()
+          void editor.eraseUnderMask()
+          return
+        }
         if (editor.selectedIds.length) {
           e.preventDefault()
           editor.remove()

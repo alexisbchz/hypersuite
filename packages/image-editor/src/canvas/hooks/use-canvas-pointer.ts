@@ -2,7 +2,15 @@
 
 import { useCallback, type RefObject } from "react"
 
-import { applyStroke, floodFillMask, sampleColorAt } from "../utils"
+import {
+  applyStroke,
+  combineMasks,
+  floodFillMask,
+  sampleColorAt,
+  type PixelMask,
+  type WandMaskMode,
+  type WandSampleSize,
+} from "../utils"
 import type { Anchor, Layer, ShapeVariant, ToolId } from "../../lib/types"
 import type {
   MarqueeState,
@@ -30,6 +38,12 @@ export function useCanvasPointer(opts: {
   brushSize: number
   brushHardness: number
   wandTolerance: number
+  wandSampleSize: WandSampleSize
+  wandContiguous: boolean
+  wandAntiAlias: boolean
+  wandSampleAllLayers: boolean
+  wandMode: WandMaskMode
+  pixelMask: PixelMask | null
   penAnchors: Anchor[]
   startPan: (e: React.PointerEvent) => void
   startShapeDraw: (state: ShapeDrawState, layerId: string) => void
@@ -40,9 +54,7 @@ export function useCanvasPointer(opts: {
   setPenHover: (p: { x: number; y: number } | null) => void
   setCursor: (c: { x: number; y: number } | null) => void
   setBrushColor: (c: string) => void
-  setPixelMask: (
-    m: { dataUrl: string; width: number; height: number } | null
-  ) => void
+  setPixelMask: (m: PixelMask | null) => void
   setTool: (t: ToolId) => void
   select: (id: string | null) => void
   addText: (opts: {
@@ -84,6 +96,12 @@ export function useCanvasPointer(opts: {
     brushSize,
     brushHardness,
     wandTolerance,
+    wandSampleSize,
+    wandContiguous,
+    wandAntiAlias,
+    wandSampleAllLayers,
+    wandMode,
+    pixelMask,
     penAnchors,
     startPan,
     startShapeDraw,
@@ -308,6 +326,19 @@ export function useCanvasPointer(opts: {
       if (tool === "wand") {
         if (docX < 0 || docX > DOC_W || docY < 0 || docY > DOC_H) return
         e.preventDefault()
+        // Photoshop modifier shortcuts: Shift = add, Alt/Option = subtract,
+        // Shift+Alt = intersect. They override the panel's selection mode for
+        // this single click (Photoshop behavior).
+        const effectiveMode: WandMaskMode =
+          e.shiftKey && e.altKey
+            ? "intersect"
+            : e.shiftKey
+              ? "add"
+              : e.altKey
+                ? "subtract"
+                : wandMode
+        const activeLayerId =
+          selectedIds.length === 1 ? (selectedIds[0] ?? null) : null
         void floodFillMask(
           layers,
           getRasterCanvas,
@@ -315,8 +346,17 @@ export function useCanvasPointer(opts: {
           Math.round(docY),
           wandTolerance,
           DOC_W,
-          DOC_H
-        ).then((mask) => setPixelMask(mask))
+          DOC_H,
+          {
+            sampleSize: wandSampleSize,
+            contiguous: wandContiguous,
+            antiAlias: wandAntiAlias,
+            sampleAllLayers: wandSampleAllLayers,
+            activeLayerId,
+          }
+        )
+          .then((mask) => combineMasks(pixelMask, mask, effectiveMode))
+          .then((mask) => setPixelMask(mask))
         return
       }
 
@@ -377,6 +417,12 @@ export function useCanvasPointer(opts: {
       penAnchors,
       layers,
       wandTolerance,
+      wandSampleSize,
+      wandContiguous,
+      wandAntiAlias,
+      wandSampleAllLayers,
+      wandMode,
+      pixelMask,
       setPixelMask,
       startShapeDraw,
       startStroke,

@@ -11,13 +11,21 @@ import {
   AlignVerticalCenterIcon,
   DistributeHorizontalCenterIcon,
   DistributeVerticalCenterIcon,
+  CursorMagicSelectionIcon,
+  Layers01Icon,
   MagicWand01Icon,
   PaintBucketIcon,
+  PathfinderIntersectIcon,
+  PathfinderMinusFrontIcon,
+  PathfinderUniteIcon,
   Rotate01Icon,
   Settings02Icon,
 } from "@hugeicons/core-free-icons"
 
+import { Button } from "@workspace/ui/components/button"
 import { Input } from "@workspace/ui/components/input"
+import { Label } from "@workspace/ui/components/label"
+import { Slider } from "@workspace/ui/components/slider"
 import { Switch } from "@workspace/ui/components/switch"
 import {
   Tooltip,
@@ -25,6 +33,7 @@ import {
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
+import type { WandMaskMode, WandSampleSize } from "../canvas/utils"
 import { ColorPicker } from "../pickers/color-picker"
 import { FontPicker } from "../pickers/font-picker"
 import { useEditor } from "../editor"
@@ -70,6 +79,16 @@ export function PropertiesPanel() {
     setBrushHardness,
     wandTolerance,
     setWandTolerance,
+    wandSampleSize,
+    setWandSampleSize,
+    wandContiguous,
+    setWandContiguous,
+    wandAntiAlias,
+    setWandAntiAlias,
+    wandSampleAllLayers,
+    setWandSampleAllLayers,
+    wandMode,
+    setWandMode,
     pixelMask,
     eraseUnderMask,
     invertMask,
@@ -184,79 +203,95 @@ export function PropertiesPanel() {
           </Section>
         )}
         {tool === "wand" && (
-          <Section title="Magic wand" icon={PaintBucketIcon}>
-            <Row label="Tolerance">
-              <input
-                type="range"
-                min={0}
-                max={128}
-                value={wandTolerance}
-                onChange={(e) => setWandTolerance(Number(e.target.value))}
-                className="w-full"
+          <>
+            <Section title="Selection" icon={CursorMagicSelectionIcon}>
+              <Row label="Mode">
+                <WandModeRow value={wandMode} onChange={setWandMode} />
+              </Row>
+              <Row label="Tolerance">
+                <ToleranceField
+                  value={wandTolerance}
+                  onChange={setWandTolerance}
+                />
+              </Row>
+              <Row label="Sample">
+                <SampleSizeSelect
+                  value={wandSampleSize}
+                  onChange={setWandSampleSize}
+                />
+              </Row>
+              <ToggleRow
+                label="Anti-alias"
+                checked={wandAntiAlias}
+                onChange={setWandAntiAlias}
               />
-            </Row>
-            <p className="px-1 text-[11px] text-muted-foreground">
-              {pixelMask
-                ? "Mask active. Apply it to the active raster layer to erase."
-                : "Click on the canvas to flood-fill a selection mask."}
-            </p>
-            <div className="flex flex-col gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  void extractMaskToLayer()
-                }}
+              <ToggleRow
+                label="Contiguous"
+                checked={wandContiguous}
+                onChange={setWandContiguous}
+              />
+              <ToggleRow
+                label="Sample all layers"
+                checked={wandSampleAllLayers}
+                onChange={setWandSampleAllLayers}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {pixelMask
+                  ? `${pixelMask.count.toLocaleString()} pixels selected`
+                  : "Click the canvas to start a selection"}
+              </p>
+              <p className="text-[11px] text-muted-foreground/80">
+                Hold{" "}
+                <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">
+                  Shift
+                </kbd>{" "}
+                to add ·{" "}
+                <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">
+                  Alt
+                </kbd>{" "}
+                to subtract
+              </p>
+            </Section>
+            <Section title="Apply selection" icon={MagicWand01Icon}>
+              <Button
+                variant="default"
+                size="sm"
                 disabled={!pixelMask}
-                className={cn(
-                  "h-7 w-full rounded-md border border-border text-xs",
-                  pixelMask
-                    ? "bg-foreground text-background hover:bg-foreground/90"
-                    : "pointer-events-none opacity-40"
-                )}
+                onClick={() => void extractMaskToLayer()}
+                className="w-full justify-center"
               >
+                <HugeiconsIcon icon={Layers01Icon} />
                 Extract to new layer
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void invertMask()
-                }}
+              </Button>
+              <div className="grid grid-cols-2 gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!pixelMask}
+                  onClick={() => void invertMask()}
+                >
+                  Invert
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!pixelMask}
+                  onClick={() => setPixelMask(null)}
+                >
+                  Deselect
+                </Button>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
                 disabled={!pixelMask}
-                className={cn(
-                  "h-7 w-full rounded-md border border-border text-xs hover:bg-muted",
-                  !pixelMask && "pointer-events-none opacity-40"
-                )}
-              >
-                Invert mask
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void eraseUnderMask()
-                }}
-                disabled={!pixelMask}
-                className={cn(
-                  "h-7 w-full rounded-md border border-border text-xs",
-                  pixelMask
-                    ? "text-destructive-foreground bg-destructive hover:bg-destructive/90"
-                    : "pointer-events-none opacity-40"
-                )}
+                onClick={() => void eraseUnderMask()}
+                className="w-full justify-center"
               >
                 Erase masked pixels
-              </button>
-              <button
-                type="button"
-                onClick={() => setPixelMask(null)}
-                disabled={!pixelMask}
-                className={cn(
-                  "h-7 w-full rounded-md border border-border text-xs hover:bg-muted",
-                  !pixelMask && "pointer-events-none opacity-40"
-                )}
-              >
-                Clear mask
-              </button>
-            </div>
-          </Section>
+              </Button>
+            </Section>
+          </>
         )}
       </div>
     )
@@ -1020,6 +1055,145 @@ function ColorField({
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, n))
+}
+
+function WandModeRow({
+  value,
+  onChange,
+}: {
+  value: WandMaskMode
+  onChange: (m: WandMaskMode) => void
+}) {
+  const items: { id: WandMaskMode; label: string; icon: typeof Settings02Icon }[] = [
+    { id: "new", label: "New selection", icon: CursorMagicSelectionIcon },
+    { id: "add", label: "Add to selection (Shift)", icon: PathfinderUniteIcon },
+    {
+      id: "subtract",
+      label: "Subtract from selection (Alt)",
+      icon: PathfinderMinusFrontIcon,
+    },
+    {
+      id: "intersect",
+      label: "Intersect (Shift+Alt)",
+      icon: PathfinderIntersectIcon,
+    },
+  ]
+  return (
+    <div
+      data-slot="button-group"
+      className="flex w-full overflow-hidden rounded-md border border-border"
+    >
+      {items.map((item, i) => {
+        const active = value === item.id
+        return (
+          <Tooltip key={item.id}>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  onClick={() => onChange(item.id)}
+                  aria-label={item.label}
+                  aria-pressed={active}
+                  className={cn(
+                    "inline-flex h-7 flex-1 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                    i > 0 && "border-l border-border",
+                    active &&
+                      "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                  )}
+                >
+                  <HugeiconsIcon icon={item.icon} className="size-3.5" />
+                </button>
+              }
+            />
+            <TooltipContent>{item.label}</TooltipContent>
+          </Tooltip>
+        )
+      })}
+    </div>
+  )
+}
+
+function ToleranceField({
+  value,
+  onChange,
+}: {
+  value: number
+  onChange: (v: number) => void
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Slider
+        value={[value]}
+        min={0}
+        max={255}
+        step={1}
+        onValueChange={(v) => {
+          if (Array.isArray(v) && typeof v[0] === "number") onChange(v[0])
+        }}
+        className="min-w-0 flex-1"
+      />
+      <Input
+        type="number"
+        min={0}
+        max={255}
+        value={value}
+        onChange={(e) => {
+          const n = Number(e.currentTarget.value)
+          if (Number.isFinite(n))
+            onChange(Math.max(0, Math.min(255, Math.round(n))))
+        }}
+        className="h-7 w-12 px-1.5 text-center font-mono text-[11px] tabular-nums"
+      />
+    </div>
+  )
+}
+
+function SampleSizeSelect({
+  value,
+  onChange,
+}: {
+  value: WandSampleSize
+  onChange: (v: WandSampleSize) => void
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value) as WandSampleSize)}
+      className="h-7 w-full rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-ring"
+    >
+      <option value={1}>Point sample</option>
+      <option value={3}>3 × 3 average</option>
+      <option value={5}>5 × 5 average</option>
+    </select>
+  )
+}
+
+function ToggleRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  const id = `wand-toggle-${label.toLowerCase().replace(/\s+/g, "-")}`
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <Label
+        htmlFor={id}
+        className="text-[11px] font-normal text-muted-foreground"
+      >
+        {label}
+      </Label>
+      <Switch
+        id={id}
+        size="sm"
+        checked={checked}
+        onCheckedChange={onChange}
+      />
+    </div>
+  )
 }
 
 function AlignBtn({

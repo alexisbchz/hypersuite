@@ -36,7 +36,14 @@ import {
   pathBoundsUnion,
 } from "../lib/geometry"
 import type { Anchor, Layer, ShapeVariant, ToolId } from "../lib/types"
-import { extractUnderMask, invertMaskOverlay } from "../canvas/utils"
+import {
+  drawImageCover,
+  extractUnderMask,
+  invertMaskOverlay,
+  type PixelMask,
+  type WandMaskMode,
+  type WandSampleSize,
+} from "../canvas/utils"
 
 const HISTORY_LIMIT = 100
 
@@ -146,10 +153,18 @@ type EditorState = {
   setBrushHardness: (v: number) => void
   wandTolerance: number
   setWandTolerance: (v: number) => void
-  pixelMask: { dataUrl: string; width: number; height: number } | null
-  setPixelMask: (
-    m: { dataUrl: string; width: number; height: number } | null
-  ) => void
+  wandSampleSize: WandSampleSize
+  setWandSampleSize: (v: WandSampleSize) => void
+  wandContiguous: boolean
+  setWandContiguous: (v: boolean) => void
+  wandAntiAlias: boolean
+  setWandAntiAlias: (v: boolean) => void
+  wandSampleAllLayers: boolean
+  setWandSampleAllLayers: (v: boolean) => void
+  wandMode: WandMaskMode
+  setWandMode: (v: WandMaskMode) => void
+  pixelMask: PixelMask | null
+  setPixelMask: (m: PixelMask | null) => void
   /** Erase pixels in the active raster layer that fall under the current
    *  pixel mask. Returns true if applied. */
   eraseUnderMask: () => Promise<boolean>
@@ -238,11 +253,12 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   const [brushColor, setBrushColor] = useState("#111111")
   const [brushHardness, setBrushHardness] = useState(0.8)
   const [wandTolerance, setWandTolerance] = useState(32)
-  const [pixelMask, setPixelMask] = useState<{
-    dataUrl: string
-    width: number
-    height: number
-  } | null>(null)
+  const [wandSampleSize, setWandSampleSize] = useState<WandSampleSize>(1)
+  const [wandContiguous, setWandContiguous] = useState(true)
+  const [wandAntiAlias, setWandAntiAlias] = useState(true)
+  const [wandSampleAllLayers, setWandSampleAllLayers] = useState(true)
+  const [wandMode, setWandMode] = useState<WandMaskMode>("new")
+  const [pixelMask, setPixelMask] = useState<PixelMask | null>(null)
   const rasterCanvasRef = useRef<Map<string, HTMLCanvasElement>>(new Map())
   const hydratedRef = useRef(false)
 
@@ -726,44 +742,105 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
 
   const eraseUnderMask = useCallback(async () => {
     if (!pixelMask) return false
-    if (selectedIds.length !== 1) return false
-    const sel = doc.layers.find((l) => l.id === selectedIds[0])
-    if (!sel || sel.kind !== "raster") return false
-    const canvas = rasterCanvasRef.current.get(sel.id)
-    if (!canvas) return false
+    // Pick a target layer: prefer the explicit selection, otherwise fall
+    // back to the only image/raster layer (the common "open as new doc"
+    // flow has exactly one layer and the user shouldn't have to click it
+    // before hitting Delete).
+    let sel = doc.layers.find((l) => l.id === selectedIds[0])
+    if (!sel || (sel.kind !== "raster" && sel.kind !== "image")) {
+      const candidates = doc.layers.filter(
+        (l) => (l.kind === "raster" || l.kind === "image") && !l.locked
+      )
+      sel = candidates.length === 1 ? candidates[0] : undefined
+    }
+    if (!sel) return false
+    if (sel.kind !== "raster" && sel.kind !== "image") return false
+
+    let canvas = rasterCanvasRef.current.get(sel.id)
+    const isImage = sel.kind === "image"
+    // Image layers aren't directly editable — Photoshop calls this "Layer
+    // from Background". We rasterize on demand so Delete-erases-selection
+    // works on the very first wand pass without a manual conversion step.
+    if (isImage) {
+      if (!sel.src) return false
+      if (!canvas) {
+        canvas = document.createElement("canvas")
+        rasterCanvasRef.current.set(sel.id, canvas)
+      }
+      canvas.width = sel.width
+      canvas.height = sel.height
+      const c2 = canvas.getContext("2d")
+      if (!c2) return false
+      try {
+        const srcImg = await loadImage(sel.src)
+        drawImageCover(c2, srcImg, 0, 0, sel.width, sel.height)
+      } catch {
+        return false
+      }
+    }
+    if (!canvas || canvas.width === 0) return false
     const ctx = canvas.getContext("2d")
     if (!ctx) return false
 
     const mask = await loadImage(pixelMask.dataUrl)
     const safeToDataURL = () => {
       try {
-        return canvas.toDataURL("image/png")
+        return canvas!.toDataURL("image/png")
       } catch {
         return null
       }
     }
-    const pre = safeToDataURL()
+    const pre = isImage ? null : safeToDataURL()
     ctx.save()
     ctx.globalCompositeOperation = "destination-out"
-    ctx.drawImage(mask, 0, 0, canvas.width, canvas.height)
+    // Mask is in doc coords; layer canvas is in layer-local coords.
+    // Translate by -layer origin so the mask aligns over the right pixels
+    // (works for partial-coverage layers as well as the common full-doc
+    // case where the offset is zero).
+    ctx.drawImage(
+      mask,
+      -sel.x,
+      -sel.y,
+      docSettings.width,
+      docSettings.height
+    )
     ctx.restore()
     const post = safeToDataURL()
+    ;(canvas as unknown as { __applied?: string }).__applied = post ?? ""
 
-    setDoc((d) => ({
-      layers: d.layers.map((l) =>
-        l.id === sel.id ? { ...l, rasterDataUrl: post } : l
-      ),
-      past: [
-        ...d.past,
-        d.layers.map((l) =>
-          l.id === sel.id ? { ...l, rasterDataUrl: pre } : l
-        ),
-      ].slice(-HISTORY_LIMIT),
-      future: [],
-    }))
+    const targetId = sel.id
+    const layerW = sel.width
+    const layerH = sel.height
+    setDoc((d) => {
+      const pastLayers = isImage
+        ? d.layers
+        : d.layers.map((l) =>
+            l.id === targetId ? { ...l, rasterDataUrl: pre } : l
+          )
+      const nextLayers = d.layers.map((l) => {
+        if (l.id !== targetId) return l
+        if (isImage) {
+          return {
+            ...l,
+            kind: "raster" as const,
+            src: undefined,
+            rasterDataUrl: post,
+            rasterWidth: layerW,
+            rasterHeight: layerH,
+          }
+        }
+        return { ...l, rasterDataUrl: post }
+      })
+      return {
+        layers: nextLayers,
+        past: [...d.past, pastLayers].slice(-HISTORY_LIMIT),
+        future: [],
+      }
+    })
+    setSelectedIds([targetId])
     setPixelMask(null)
     return true
-  }, [pixelMask, selectedIds, doc.layers])
+  }, [pixelMask, selectedIds, doc.layers, docSettings])
 
   const invertMask = useCallback(async () => {
     if (!pixelMask) return false
@@ -1320,6 +1397,16 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       setBrushHardness,
       wandTolerance,
       setWandTolerance,
+      wandSampleSize,
+      setWandSampleSize,
+      wandContiguous,
+      setWandContiguous,
+      wandAntiAlias,
+      setWandAntiAlias,
+      wandSampleAllLayers,
+      setWandSampleAllLayers,
+      wandMode,
+      setWandMode,
       pixelMask,
       setPixelMask,
       eraseUnderMask,
@@ -1405,6 +1492,11 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       brushColor,
       brushHardness,
       wandTolerance,
+      wandSampleSize,
+      wandContiguous,
+      wandAntiAlias,
+      wandSampleAllLayers,
+      wandMode,
       pixelMask,
       eraseUnderMask,
       invertMask,

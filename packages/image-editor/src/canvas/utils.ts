@@ -2,7 +2,7 @@ import type { Layer } from "../lib/types"
 
 /** Center-crops the source so it fills the destination rect — matches the
  *  CSS `object-fit: cover` semantics used to render image layers. */
-function drawImageCover(
+export function drawImageCover(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   dx: number,
@@ -34,12 +34,14 @@ function drawImageCover(
 
 /** Composite all visible layers onto a fresh offscreen canvas. Used by the
  *  magic-wand and eyedropper paths to read pixels without going through the
- *  full export pipeline. */
+ *  full export pipeline. Pass `onlyLayerId` to restrict to a single layer
+ *  (Photoshop's "Sample all layers: off"). */
 export async function compositeDocToCanvas(
   layers: Layer[],
   getRasterCanvas: (id: string) => HTMLCanvasElement,
   width: number,
-  height: number
+  height: number,
+  onlyLayerId?: string | null
 ): Promise<HTMLCanvasElement> {
   const out = document.createElement("canvas")
   out.width = width
@@ -48,6 +50,7 @@ export async function compositeDocToCanvas(
   if (!ctx) return out
   for (const l of [...layers].reverse()) {
     if (!l.visible) continue
+    if (onlyLayerId && l.id !== onlyLayerId) continue
     ctx.save()
     ctx.globalAlpha = l.opacity / 100
     const cx = l.x + l.width / 2
@@ -110,8 +113,77 @@ export async function compositeDocToCanvas(
   return out
 }
 
-/** Magic-wand flood fill. Composites the doc, samples the start pixel, then
- *  scan-line floods all pixels within `tolerance` (Euclidean RGB distance).
+export type WandMaskMode = "new" | "add" | "subtract" | "intersect"
+
+export type WandSampleSize = 1 | 3 | 5
+
+export type PixelMask = {
+  dataUrl: string
+  width: number
+  height: number
+  /** Number of selected pixels (alpha > 0). Used for the "N pixels selected"
+   *  status line — match Photoshop's "Selection: N pixels". */
+  count: number
+}
+
+/** Average the RGBA at a `size`×`size` square centered on (cx, cy), clipped
+ *  to the doc bounds. Photoshop's "Sample size" — 1 means point sample. */
+function sampleSeed(
+  data: Uint8ClampedArray,
+  cx: number,
+  cy: number,
+  size: number,
+  W: number,
+  H: number
+) {
+  const half = (size - 1) / 2
+  const x0 = Math.max(0, Math.floor(cx - half))
+  const y0 = Math.max(0, Math.floor(cy - half))
+  const x1 = Math.min(W - 1, Math.floor(cx + half))
+  const y1 = Math.min(H - 1, Math.floor(cy + half))
+  let r = 0
+  let g = 0
+  let b = 0
+  let a = 0
+  let n = 0
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const i = (y * W + x) * 4
+      r += data[i]!
+      g += data[i + 1]!
+      b += data[i + 2]!
+      a += data[i + 3]!
+      n++
+    }
+  }
+  if (n === 0) return { r: 0, g: 0, b: 0, a: 0 }
+  return { r: r / n, g: g / n, b: b / n, a: a / n }
+}
+
+/** Mark boundary pixels (those that border an unselected pixel) with a
+ *  reduced alpha so the overlay edge looks soft. Mirrors Photoshop's
+ *  "Anti-alias" toggle on the wand. */
+function antiAliasMask(mask: Uint8Array, W: number, H: number) {
+  const out = new Uint8Array(W * H)
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x
+      if (!mask[i]) continue
+      const top = y > 0 ? mask[(y - 1) * W + x] : 0
+      const bot = y < H - 1 ? mask[(y + 1) * W + x] : 0
+      const left = x > 0 ? mask[i - 1] : 0
+      const right = x < W - 1 ? mask[i + 1] : 0
+      out[i] = top && bot && left && right ? 2 : 1
+    }
+  }
+  return out
+}
+
+/** Magic-wand selection. Composites the doc (or just the active layer when
+ *  `sampleAllLayers` is false), samples the seed color (averaged over a
+ *  `sampleSize`×`sampleSize` neighborhood), then either flood-fills
+ *  contiguous pixels within `tolerance` (Euclidean RGBA distance) or — when
+ *  `contiguous` is false — selects every pixel in the doc within tolerance.
  *  Returns a translucent-blue overlay PNG of the masked region. */
 export async function floodFillMask(
   layers: Layer[],
@@ -120,13 +192,26 @@ export async function floodFillMask(
   startY: number,
   tolerance: number,
   DOC_W: number,
-  DOC_H: number
-): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  DOC_H: number,
+  opts: {
+    sampleSize?: WandSampleSize
+    contiguous?: boolean
+    antiAlias?: boolean
+    sampleAllLayers?: boolean
+    activeLayerId?: string | null
+  } = {}
+): Promise<PixelMask | null> {
+  const sampleSize = opts.sampleSize ?? 1
+  const contiguous = opts.contiguous ?? true
+  const antiAlias = opts.antiAlias ?? true
+  const sampleAllLayers = opts.sampleAllLayers ?? true
+
   const composite = await compositeDocToCanvas(
     layers,
     getRasterCanvas,
     DOC_W,
-    DOC_H
+    DOC_H,
+    sampleAllLayers ? null : opts.activeLayerId
   )
   const ctx = composite.getContext("2d", { willReadFrequently: true })
   if (!ctx) return null
@@ -139,105 +224,158 @@ export async function floodFillMask(
   const data = img.data
   if (startX < 0 || startX >= DOC_W || startY < 0 || startY >= DOC_H)
     return null
-  const idx0 = (startY * DOC_W + startX) * 4
-  const r0 = data[idx0]!
-  const g0 = data[idx0 + 1]!
-  const b0 = data[idx0 + 2]!
-  const a0 = data[idx0 + 3]!
+  const seed = sampleSeed(data, startX, startY, sampleSize, DOC_W, DOC_H)
+  const r0 = seed.r
+  const g0 = seed.g
+  const b0 = seed.b
+  const a0 = seed.a
   const tol2 = tolerance * tolerance
   const mask = new Uint8Array(DOC_W * DOC_H)
   // Compare alpha as a 4th channel so transparent regions only match other
   // transparent regions (and don't bleed across an image's alpha boundary
   // because the underlying RGB happens to match).
-  const near = (
-    d: Uint8ClampedArray,
-    x: number,
-    y: number,
-    rr: number,
-    gg: number,
-    bb: number,
-    aa: number
-  ) => {
+  const near = (x: number, y: number) => {
     const idx = (y * DOC_W + x) * 4
-    const dr = d[idx]! - rr
-    const dg = d[idx + 1]! - gg
-    const db = d[idx + 2]! - bb
-    const da = d[idx + 3]! - aa
+    const dr = data[idx]! - r0
+    const dg = data[idx + 1]! - g0
+    const db = data[idx + 2]! - b0
+    const da = data[idx + 3]! - a0
     return dr * dr + dg * dg + db * db + da * da <= tol2
   }
-  const stack: number[] = [startX, startY]
-  while (stack.length) {
-    const y = stack.pop()!
-    const x = stack.pop()!
-    let lx = x
-    while (
-      lx >= 0 &&
-      !mask[y * DOC_W + lx] &&
-      near(data, lx, y, r0, g0, b0, a0)
-    )
-      lx--
-    lx++
-    let rx = x
-    while (
-      rx < DOC_W &&
-      !mask[y * DOC_W + rx] &&
-      near(data, rx, y, r0, g0, b0, a0)
-    )
-      rx++
-    rx--
-    for (let i = lx; i <= rx; i++) {
-      mask[y * DOC_W + i] = 1
+  if (contiguous) {
+    const stack: number[] = [startX, startY]
+    while (stack.length) {
+      const y = stack.pop()!
+      const x = stack.pop()!
+      let lx = x
+      while (lx >= 0 && !mask[y * DOC_W + lx] && near(lx, y)) lx--
+      lx++
+      let rx = x
+      while (rx < DOC_W && !mask[y * DOC_W + rx] && near(rx, y)) rx++
+      rx--
+      for (let i = lx; i <= rx; i++) {
+        mask[y * DOC_W + i] = 1
+      }
+      for (const yy of [y - 1, y + 1]) {
+        if (yy < 0 || yy >= DOC_H) continue
+        let i = lx
+        while (i <= rx) {
+          while (i <= rx && (mask[yy * DOC_W + i] || !near(i, yy))) i++
+          if (i > rx) break
+          const segStart = i
+          while (i <= rx && !mask[yy * DOC_W + i] && near(i, yy)) i++
+          stack.push(segStart, yy)
+        }
+      }
     }
-    for (const yy of [y - 1, y + 1]) {
-      if (yy < 0 || yy >= DOC_H) continue
-      let i = lx
-      while (i <= rx) {
-        while (
-          i <= rx &&
-          (mask[yy * DOC_W + i] || !near(data, i, yy, r0, g0, b0, a0))
-        )
-          i++
-        if (i > rx) break
-        const segStart = i
-        while (
-          i <= rx &&
-          !mask[yy * DOC_W + i] &&
-          near(data, i, yy, r0, g0, b0, a0)
-        )
-          i++
-        stack.push(segStart, yy)
+  } else {
+    // Photoshop "Contiguous: off" — match every pixel in the doc within
+    // tolerance, regardless of adjacency.
+    for (let y = 0; y < DOC_H; y++) {
+      for (let x = 0; x < DOC_W; x++) {
+        if (near(x, y)) mask[y * DOC_W + x] = 1
       }
     }
   }
+  const edges = antiAlias ? antiAliasMask(mask, DOC_W, DOC_H) : null
   const out = document.createElement("canvas")
   out.width = DOC_W
   out.height = DOC_H
   const oc = out.getContext("2d")
   if (!oc) return null
   const overlay = oc.createImageData(DOC_W, DOC_H)
+  let count = 0
   for (let i = 0; i < DOC_W * DOC_H; i++) {
-    if (mask[i]) {
-      overlay.data[i * 4] = 79
-      overlay.data[i * 4 + 1] = 122
-      overlay.data[i * 4 + 2] = 255
-      overlay.data[i * 4 + 3] = 110
-    }
+    if (!mask[i]) continue
+    count++
+    overlay.data[i * 4] = 79
+    overlay.data[i * 4 + 1] = 122
+    overlay.data[i * 4 + 2] = 255
+    // edges flag: 2 = interior (full alpha), 1 = boundary (half alpha)
+    const soft = edges ? edges[i] === 1 : false
+    overlay.data[i * 4 + 3] = soft ? 55 : 110
   }
   oc.putImageData(overlay, 0, 0)
   return {
     dataUrl: out.toDataURL("image/png"),
     width: DOC_W,
     height: DOC_H,
+    count,
   }
+}
+
+/** Combine an existing pixel mask with a freshly-flooded mask using
+ *  Photoshop's selection-mode operators. `new` replaces, `add` is union,
+ *  `subtract` is set difference, `intersect` is intersection.
+ *
+ *  We rasterize both masks to alpha buffers and walk pixels in JS rather
+ *  than rely on canvas composite ops — the masks have semi-transparent
+ *  edges (~110/255 alpha for the body, ~55 for anti-aliased rims), so
+ *  `destination-out` would only partially erase. Treating each pixel as
+ *  binary (alpha > 0 = selected) gives the user the set-theoretic result
+ *  Photoshop ships. */
+export async function combineMasks(
+  prev: PixelMask | null,
+  next: PixelMask | null,
+  mode: WandMaskMode
+): Promise<PixelMask | null> {
+  if (mode === "new") return next
+  if (!prev) return mode === "subtract" || mode === "intersect" ? null : next
+  if (!next) return mode === "intersect" ? null : prev
+  const W = next.width
+  const H = next.height
+  const c = document.createElement("canvas")
+  c.width = W
+  c.height = H
+  const ctx = c.getContext("2d", { willReadFrequently: true })
+  if (!ctx) return prev
+  const [pImg, nImg] = await Promise.all([
+    loadImage(prev.dataUrl),
+    loadImage(next.dataUrl),
+  ])
+  ctx.drawImage(pImg, 0, 0, W, H)
+  let pData: ImageData
+  try {
+    pData = ctx.getImageData(0, 0, W, H)
+  } catch {
+    return prev
+  }
+  ctx.clearRect(0, 0, W, H)
+  ctx.drawImage(nImg, 0, 0, W, H)
+  let nData: ImageData
+  try {
+    nData = ctx.getImageData(0, 0, W, H)
+  } catch {
+    return prev
+  }
+  const out = ctx.createImageData(W, H)
+  let count = 0
+  for (let i = 0; i < W * H; i++) {
+    const pa = pData.data[i * 4 + 3]!
+    const na = nData.data[i * 4 + 3]!
+    let selected: boolean
+    if (mode === "add") selected = pa > 0 || na > 0
+    else if (mode === "subtract") selected = pa > 0 && na === 0
+    else selected = pa > 0 && na > 0
+    if (!selected) continue
+    // Soft (anti-aliased) rim if either source had a soft pixel here.
+    const soft = (pa > 0 && pa < 100) || (na > 0 && na < 100)
+    out.data[i * 4] = 79
+    out.data[i * 4 + 1] = 122
+    out.data[i * 4 + 2] = 255
+    out.data[i * 4 + 3] = soft ? 55 : 110
+    count++
+  }
+  ctx.clearRect(0, 0, W, H)
+  ctx.putImageData(out, 0, 0)
+  return { dataUrl: c.toDataURL("image/png"), width: W, height: H, count }
 }
 
 /** Invert a wand-mask overlay PNG: pixels currently masked become unmasked
  *  and vice versa. Used for "select inverse" on the magic-wand selection. */
-export async function invertMaskOverlay(mask: {
-  dataUrl: string
-  width: number
-  height: number
-}): Promise<{ dataUrl: string; width: number; height: number } | null> {
+export async function invertMaskOverlay(
+  mask: PixelMask
+): Promise<PixelMask | null> {
   const img = await loadImage(mask.dataUrl)
   const canvas = document.createElement("canvas")
   canvas.width = mask.width
@@ -252,6 +390,7 @@ export async function invertMaskOverlay(mask: {
     return null
   }
   const data = pix.data
+  let count = 0
   for (let i = 0; i < mask.width * mask.height; i++) {
     const a = data[i * 4 + 3]!
     if (a > 0) {
@@ -261,6 +400,7 @@ export async function invertMaskOverlay(mask: {
       data[i * 4 + 1] = 122
       data[i * 4 + 2] = 255
       data[i * 4 + 3] = 110
+      count++
     }
   }
   ctx.putImageData(pix, 0, 0)
@@ -268,6 +408,7 @@ export async function invertMaskOverlay(mask: {
     dataUrl: canvas.toDataURL("image/png"),
     width: mask.width,
     height: mask.height,
+    count,
   }
 }
 
@@ -277,7 +418,7 @@ export async function invertMaskOverlay(mask: {
 export async function extractUnderMask(
   layers: Layer[],
   getRasterCanvas: (id: string) => HTMLCanvasElement,
-  mask: { dataUrl: string; width: number; height: number },
+  mask: PixelMask,
   DOC_W: number,
   DOC_H: number
 ): Promise<string | null> {
@@ -305,7 +446,7 @@ export async function extractUnderMask(
   }
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
+export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new window.Image()
     img.onload = () => resolve(img)
