@@ -10,7 +10,9 @@ import {
   ArrowLeft01Icon,
   Download04Icon,
   KeyboardIcon,
+  Menu02Icon,
   MoreHorizontalIcon,
+  PanelRightIcon,
   Redo02Icon,
   Settings02Icon,
   Share05Icon,
@@ -29,10 +31,19 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import { Separator } from "@workspace/ui/components/separator"
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@workspace/ui/components/sheet"
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
+import { useMediaQuery } from "@workspace/ui/hooks/use-media-query"
 import { useEditor } from "../editor"
 import {
   EXPORT_FORMATS,
@@ -47,6 +58,7 @@ import { NewDocumentDialog } from "../dialogs/new-document-dialog"
 import { ShortcutsDialog } from "../dialogs/shortcuts-dialog"
 import { downloadBlob, loadHyperimg, saveHyperimg } from "../lib/hyperimg"
 import { CMD_EVENTS } from "../chrome/command-palette"
+import { RightPanelContent } from "../panels/right-panel"
 
 const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200, 400]
 
@@ -85,7 +97,13 @@ export function TopBar() {
   const [showNewDoc, setShowNewDoc] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [shareStatus, setShareStatus] = useState<string | null>(null)
+  const [menuSheetOpen, setMenuSheetOpen] = useState(false)
+  const [panelsOpen, setPanelsOpen] = useState(false)
   const openInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Tablet (≥ md) uses a right-side sheet for the panels; phones (< md)
+  // use a bottom sheet — feels native on each form factor.
+  const tabletUp = useMediaQuery("(min-width: 768px)")
 
   const handleExport = useCallback(
     async (format: ExportFormat) => {
@@ -230,6 +248,376 @@ export function TopBar() {
   const triggerCls =
     "rounded-md px-2 py-1 text-sm text-foreground/80 hover:bg-muted hover:text-foreground data-popup-open:bg-muted data-popup-open:text-foreground"
 
+  // The 6 application menus, used both in the desktop nav strip and stacked
+  // vertically inside the mobile menu sheet. Closes over editor state, so
+  // it's defined inline rather than extracted to a sub-component.
+  const renderMenus = (vertical: boolean) => (
+    <nav
+      className={
+        vertical
+          ? "flex flex-col items-stretch gap-1 text-sm"
+          : "ml-1 flex items-center text-sm"
+      }
+    >
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              className={
+                vertical
+                  ? "rounded-md px-3 py-2 text-left text-sm hover:bg-muted data-popup-open:bg-muted"
+                  : triggerCls
+              }
+            >
+              File
+            </button>
+          }
+        />
+        <DropdownMenuContent
+          align={vertical ? "start" : "start"}
+          side={vertical ? "right" : "bottom"}
+          className="min-w-52"
+        >
+          <DropdownMenuItem onClick={() => setShowNewDoc(true)}>
+            New…
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => openInputRef.current?.click()}>
+            Open .hyperimg…
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleSaveHyperimg}>
+            Save .hyperimg
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Export as</DropdownMenuLabel>
+          {EXPORT_FORMATS.map((f) => (
+            <DropdownMenuItem
+              key={f.id}
+              onClick={() => handleExport(f.id)}
+              disabled={exporting !== null}
+            >
+              {f.label}
+              <DropdownMenuShortcut>.{f.ext}</DropdownMenuShortcut>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              className={
+                vertical
+                  ? "rounded-md px-3 py-2 text-left text-sm hover:bg-muted data-popup-open:bg-muted"
+                  : triggerCls
+              }
+            >
+              Edit
+            </button>
+          }
+        />
+        <DropdownMenuContent
+          align="start"
+          side={vertical ? "right" : "bottom"}
+          className="min-w-52"
+        >
+          <DropdownMenuItem onClick={undo} disabled={!canUndo}>
+            Undo
+            <DropdownMenuShortcut>⌘Z</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={redo} disabled={!canRedo}>
+            Redo
+            <DropdownMenuShortcut>⌘⇧Z</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => duplicate()} disabled={noSel}>
+            Duplicate
+            <DropdownMenuShortcut>⌘D</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => remove()}
+            disabled={noSel}
+            variant="destructive"
+          >
+            Delete
+            <DropdownMenuShortcut>⌫</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => select(null)} disabled={noSel}>
+            Deselect
+            <DropdownMenuShortcut>Esc</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              className={
+                vertical
+                  ? "rounded-md px-3 py-2 text-left text-sm hover:bg-muted data-popup-open:bg-muted"
+                  : triggerCls
+              }
+            >
+              View
+            </button>
+          }
+        />
+        <DropdownMenuContent
+          align="start"
+          side={vertical ? "right" : "bottom"}
+          className="min-w-52"
+        >
+          <DropdownMenuItem onClick={() => setZoom(Math.round(zoom * 1.2))}>
+            Zoom in
+            <DropdownMenuShortcut>⌘=</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setZoom(Math.round(zoom / 1.2))}>
+            Zoom out
+            <DropdownMenuShortcut>⌘-</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setZoom(100)}>
+            Actual size (100%)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={resetView}>
+            Reset view
+            <DropdownMenuShortcut>⌘0</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled>
+            Zoom to fit
+            <DropdownMenuShortcut>⌘1</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled>
+            Zoom to selection
+            <DropdownMenuShortcut>⌘2</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Zoom presets</DropdownMenuLabel>
+          {ZOOM_PRESETS.map((z) => (
+            <DropdownMenuItem key={z} onClick={() => setZoom(z)}>
+              {z}%
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              className={
+                vertical
+                  ? "rounded-md px-3 py-2 text-left text-sm hover:bg-muted data-popup-open:bg-muted"
+                  : triggerCls
+              }
+            >
+              Image
+            </button>
+          }
+        />
+        <DropdownMenuContent
+          align="start"
+          side={vertical ? "right" : "bottom"}
+          className="min-w-52"
+        >
+          <DropdownMenuItem
+            onClick={() => sel && void removeBackgroundFromLayer(sel.id)}
+            disabled={
+              !sel ||
+              (sel.kind !== "image" && sel.kind !== "raster") ||
+              sel.locked ||
+              sel.id in bgRemovalProgress
+            }
+          >
+            Remove background…
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setShowDocument(true)}>
+            Document settings…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              className={
+                vertical
+                  ? "rounded-md px-3 py-2 text-left text-sm hover:bg-muted data-popup-open:bg-muted"
+                  : triggerCls
+              }
+            >
+              Object
+            </button>
+          }
+        />
+        <DropdownMenuContent
+          align="start"
+          side={vertical ? "right" : "bottom"}
+          className="min-w-52"
+        >
+          <DropdownMenuItem
+            onClick={() => sel && moveTo(sel.id, 0)}
+            disabled={noSel || isFirst}
+          >
+            Bring to front
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => sel && reorder(sel.id, "up")}
+            disabled={noSel || isFirst}
+          >
+            Bring forward
+            <DropdownMenuShortcut>⌘]</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => sel && reorder(sel.id, "down")}
+            disabled={noSel || isLast}
+          >
+            Send backward
+            <DropdownMenuShortcut>⌘[</DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => sel && moveTo(sel.id, layers.length)}
+            disabled={noSel || isLast}
+          >
+            Send to back
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => sel && toggleLocked(sel.id)}
+            disabled={noSel}
+          >
+            {sel?.locked ? "Unlock" : "Lock"}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => duplicate()} disabled={noSel}>
+            Duplicate
+            <DropdownMenuShortcut>⌘D</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              className={
+                vertical
+                  ? "rounded-md px-3 py-2 text-left text-sm hover:bg-muted data-popup-open:bg-muted"
+                  : triggerCls
+              }
+            >
+              Filter
+            </button>
+          }
+        />
+        <DropdownMenuContent
+          align="start"
+          side={vertical ? "right" : "bottom"}
+          className="min-w-52"
+        >
+          <DropdownMenuLabel>Apply to selection</DropdownMenuLabel>
+          <DropdownMenuItem
+            disabled={noSel}
+            onClick={() =>
+              sel &&
+              setProp(sel.id, {
+                effects: { ...(sel.effects ?? {}), blur: 8 },
+              })
+            }
+          >
+            Blur 8px
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={noSel}
+            onClick={() =>
+              sel &&
+              setProp(sel.id, {
+                effects: { ...(sel.effects ?? {}), blur: 16 },
+              })
+            }
+          >
+            Blur 16px
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={noSel}
+            onClick={() =>
+              sel &&
+              setProp(sel.id, {
+                filters: {
+                  ...(sel.filters ?? {}),
+                  sharpen: { strength: 35 },
+                },
+              })
+            }
+          >
+            Sharpen
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={noSel}
+            onClick={() =>
+              sel &&
+              setProp(sel.id, {
+                filters: {
+                  ...(sel.filters ?? {}),
+                  noise: { amount: 25, mono: false },
+                },
+              })
+            }
+          >
+            Noise
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={noSel}
+            onClick={() =>
+              sel &&
+              setProp(sel.id, {
+                filters: {
+                  ...(sel.filters ?? {}),
+                  noise: { amount: 30, mono: true },
+                },
+              })
+            }
+          >
+            Mono noise
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={noSel}
+            onClick={() =>
+              sel &&
+              setProp(sel.id, {
+                filters: {
+                  ...(sel.filters ?? {}),
+                  grain: { amount: 35, scale: 1 },
+                },
+              })
+            }
+          >
+            Film grain
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={noSel}
+            onClick={() =>
+              sel &&
+              setProp(sel.id, {
+                filters: undefined,
+                effects: sel.effects
+                  ? { ...sel.effects, blur: null }
+                  : undefined,
+              })
+            }
+            variant="destructive"
+          >
+            Clear filters
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </nav>
+  )
+
   return (
     <header className="flex h-11 shrink-0 items-center border-b border-border bg-background pe-2">
       <Tooltip>
@@ -254,287 +642,37 @@ export function TopBar() {
 
       <Separator orientation="vertical" className="h-11" />
 
-      <nav className="ml-1 flex items-center text-sm">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<button className={triggerCls}>File</button>}
-          />
-          <DropdownMenuContent align="start" className="min-w-52">
-            <DropdownMenuItem onClick={() => setShowNewDoc(true)}>
-              New…
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => openInputRef.current?.click()}>
-              Open .hyperimg…
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleSaveHyperimg}>
-              Save .hyperimg
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Export as</DropdownMenuLabel>
-            {EXPORT_FORMATS.map((f) => (
-              <DropdownMenuItem
-                key={f.id}
-                onClick={() => handleExport(f.id)}
-                disabled={exporting !== null}
-              >
-                {f.label}
-                <DropdownMenuShortcut>.{f.ext}</DropdownMenuShortcut>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {/* Mobile: hamburger that opens the full menu strip inside a sheet. */}
+      <Sheet open={menuSheetOpen} onOpenChange={setMenuSheetOpen}>
+        <SheetTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Open menu"
+              className="ml-1 md:hidden"
+            >
+              <HugeiconsIcon icon={Menu02Icon} />
+            </Button>
+          }
+        />
+        <SheetContent side="left" className="w-72 p-0">
+          <SheetHeader className="border-b border-border">
+            <SheetTitle>Menu</SheetTitle>
+            <SheetDescription>File, edit, and view actions.</SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto p-2">{renderMenus(true)}</div>
+        </SheetContent>
+      </Sheet>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<button className={triggerCls}>Edit</button>}
-          />
-          <DropdownMenuContent align="start" className="min-w-52">
-            <DropdownMenuItem onClick={undo} disabled={!canUndo}>
-              Undo
-              <DropdownMenuShortcut>⌘Z</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={redo} disabled={!canRedo}>
-              Redo
-              <DropdownMenuShortcut>⌘⇧Z</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => duplicate()} disabled={noSel}>
-              Duplicate
-              <DropdownMenuShortcut>⌘D</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => remove()}
-              disabled={noSel}
-              variant="destructive"
-            >
-              Delete
-              <DropdownMenuShortcut>⌫</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => select(null)} disabled={noSel}>
-              Deselect
-              <DropdownMenuShortcut>Esc</DropdownMenuShortcut>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<button className={triggerCls}>View</button>}
-          />
-          <DropdownMenuContent align="start" className="min-w-52">
-            <DropdownMenuItem onClick={() => setZoom(Math.round(zoom * 1.2))}>
-              Zoom in
-              <DropdownMenuShortcut>⌘=</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setZoom(Math.round(zoom / 1.2))}>
-              Zoom out
-              <DropdownMenuShortcut>⌘-</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setZoom(100)}>
-              Actual size (100%)
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={resetView}>
-              Reset view
-              <DropdownMenuShortcut>⌘0</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled>
-              Zoom to fit
-              <DropdownMenuShortcut>⌘1</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled>
-              Zoom to selection
-              <DropdownMenuShortcut>⌘2</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Zoom presets</DropdownMenuLabel>
-            {ZOOM_PRESETS.map((z) => (
-              <DropdownMenuItem key={z} onClick={() => setZoom(z)}>
-                {z}%
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<button className={triggerCls}>Image</button>}
-          />
-          <DropdownMenuContent align="start" className="min-w-52">
-            <DropdownMenuItem
-              onClick={() => sel && void removeBackgroundFromLayer(sel.id)}
-              disabled={
-                !sel ||
-                (sel.kind !== "image" && sel.kind !== "raster") ||
-                sel.locked ||
-                sel.id in bgRemovalProgress
-              }
-            >
-              Remove background…
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setShowDocument(true)}>
-              Document settings…
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<button className={triggerCls}>Object</button>}
-          />
-          <DropdownMenuContent align="start" className="min-w-52">
-            <DropdownMenuItem
-              onClick={() => sel && moveTo(sel.id, 0)}
-              disabled={noSel || isFirst}
-            >
-              Bring to front
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => sel && reorder(sel.id, "up")}
-              disabled={noSel || isFirst}
-            >
-              Bring forward
-              <DropdownMenuShortcut>⌘]</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => sel && reorder(sel.id, "down")}
-              disabled={noSel || isLast}
-            >
-              Send backward
-              <DropdownMenuShortcut>⌘[</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => sel && moveTo(sel.id, layers.length)}
-              disabled={noSel || isLast}
-            >
-              Send to back
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => sel && toggleLocked(sel.id)}
-              disabled={noSel}
-            >
-              {sel?.locked ? "Unlock" : "Lock"}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => duplicate()} disabled={noSel}>
-              Duplicate
-              <DropdownMenuShortcut>⌘D</DropdownMenuShortcut>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<button className={triggerCls}>Filter</button>}
-          />
-          <DropdownMenuContent align="start" className="min-w-52">
-            <DropdownMenuLabel>Apply to selection</DropdownMenuLabel>
-            <DropdownMenuItem
-              disabled={noSel}
-              onClick={() =>
-                sel &&
-                setProp(sel.id, {
-                  effects: { ...(sel.effects ?? {}), blur: 8 },
-                })
-              }
-            >
-              Blur 8px
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={noSel}
-              onClick={() =>
-                sel &&
-                setProp(sel.id, {
-                  effects: { ...(sel.effects ?? {}), blur: 16 },
-                })
-              }
-            >
-              Blur 16px
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={noSel}
-              onClick={() =>
-                sel &&
-                setProp(sel.id, {
-                  filters: {
-                    ...(sel.filters ?? {}),
-                    sharpen: { strength: 35 },
-                  },
-                })
-              }
-            >
-              Sharpen
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={noSel}
-              onClick={() =>
-                sel &&
-                setProp(sel.id, {
-                  filters: {
-                    ...(sel.filters ?? {}),
-                    noise: { amount: 25, mono: false },
-                  },
-                })
-              }
-            >
-              Noise
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={noSel}
-              onClick={() =>
-                sel &&
-                setProp(sel.id, {
-                  filters: {
-                    ...(sel.filters ?? {}),
-                    noise: { amount: 30, mono: true },
-                  },
-                })
-              }
-            >
-              Mono noise
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={noSel}
-              onClick={() =>
-                sel &&
-                setProp(sel.id, {
-                  filters: {
-                    ...(sel.filters ?? {}),
-                    grain: { amount: 35, scale: 1 },
-                  },
-                })
-              }
-            >
-              Film grain
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={noSel}
-              onClick={() =>
-                sel &&
-                setProp(sel.id, {
-                  filters: undefined,
-                  effects: sel.effects
-                    ? { ...sel.effects, blur: null }
-                    : undefined,
-                })
-              }
-              variant="destructive"
-            >
-              Clear filters
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </nav>
+      <div className="hidden md:contents">{renderMenus(false)}</div>
 
       <Separator orientation="vertical" className="mx-1 h-11" />
 
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-44 rounded-md bg-transparent px-2 py-1 text-sm font-medium text-foreground outline-none hover:bg-muted focus:bg-muted"
+        className="hidden w-32 rounded-md bg-transparent px-2 py-1 text-sm font-medium text-foreground outline-none hover:bg-muted focus:bg-muted sm:block sm:w-44"
       />
 
       <div className="ml-auto flex items-center gap-1">
@@ -571,9 +709,12 @@ export function TopBar() {
           <TooltipContent>Redo · ⌘⇧Z</TooltipContent>
         </Tooltip>
 
-        <Separator orientation="vertical" className="mx-1 h-11" />
+        <Separator
+          orientation="vertical"
+          className="mx-1 hidden h-11 sm:block"
+        />
 
-        <div className="relative">
+        <div className="relative hidden sm:block">
           <select
             value={ZOOM_PRESETS.includes(zoom) ? zoom : ""}
             onChange={(e) => setZoom(Number(e.target.value))}
@@ -598,6 +739,41 @@ export function TopBar() {
 
         <Separator orientation="vertical" className="mx-1 h-11" />
 
+        {/* Panels sheet trigger — visible below the lg breakpoint where the
+            inline RightPanel is hidden. */}
+        <Sheet open={panelsOpen} onOpenChange={setPanelsOpen}>
+          <SheetTrigger
+            render={
+              <Button
+                variant="outline"
+                size="icon-sm"
+                aria-label="Open panels"
+                className="lg:hidden"
+              >
+                <HugeiconsIcon icon={PanelRightIcon} />
+              </Button>
+            }
+          />
+          <SheetContent
+            side={tabletUp ? "right" : "bottom"}
+            className={
+              tabletUp
+                ? "w-80 p-0 sm:max-w-sm"
+                : "h-[80svh] max-h-[640px] p-0"
+            }
+          >
+            <SheetHeader className="border-b border-border">
+              <SheetTitle>Panels</SheetTitle>
+              <SheetDescription>
+                Properties, layers, and assets for the current document.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <RightPanelContent />
+            </div>
+          </SheetContent>
+        </Sheet>
+
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -608,7 +784,11 @@ export function TopBar() {
                 aria-label="Export"
               >
                 <HugeiconsIcon icon={Download04Icon} />
-                {exporting ? `Exporting ${exporting.toUpperCase()}…` : "Export"}
+                <span className="hidden sm:inline">
+                  {exporting
+                    ? `Exporting ${exporting.toUpperCase()}…`
+                    : "Export"}
+                </span>
                 <HugeiconsIcon
                   icon={ArrowDown01Icon}
                   className="ms-0.5 -me-0.5 size-3 text-muted-foreground"
@@ -637,7 +817,9 @@ export function TopBar() {
             render={
               <Button size="sm" aria-label="Share">
                 <HugeiconsIcon icon={Share05Icon} />
-                {shareStatus ?? "Share"}
+                <span className="hidden sm:inline">
+                  {shareStatus ?? "Share"}
+                </span>
               </Button>
             }
           />
@@ -669,6 +851,7 @@ export function TopBar() {
                 size="icon-sm"
                 aria-label="Settings"
                 onClick={() => setShowSettings(true)}
+                className="hidden sm:inline-flex"
               >
                 <HugeiconsIcon icon={Settings02Icon} />
               </Button>
@@ -686,6 +869,13 @@ export function TopBar() {
             }
           />
           <DropdownMenuContent align="end" className="min-w-52">
+            <DropdownMenuItem
+              className="sm:hidden"
+              onClick={() => setShowSettings(true)}
+            >
+              <HugeiconsIcon icon={Settings02Icon} className="size-3.5" />
+              Settings
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setShowShortcuts(true)}>
               <HugeiconsIcon icon={KeyboardIcon} className="size-3.5" />
               Keyboard shortcuts

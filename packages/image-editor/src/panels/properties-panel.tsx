@@ -1013,7 +1013,7 @@ function NumField({
   suffix?: string
 }) {
   return (
-    <InputGroup className="h-7">
+    <InputGroup className="h-9 lg:h-7">
       <InputGroupAddon
         align="inline-start"
         className="ps-2 text-[11px] text-muted-foreground"
@@ -1179,7 +1179,7 @@ function ToleranceField({
           if (Number.isFinite(n))
             onChange(Math.max(0, Math.min(255, Math.round(n))))
         }}
-        className="h-7 w-12 px-1.5 text-center font-mono text-[11px] tabular-nums"
+        className="h-9 w-14 px-1.5 text-center font-mono text-[11px] tabular-nums lg:h-7 lg:w-12"
       />
     </div>
   )
@@ -1402,7 +1402,7 @@ function AlignBtn({
             disabled={disabled}
             aria-label={tip}
             className={cn(
-              "inline-flex size-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+              "inline-flex size-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:size-7",
               disabled && "pointer-events-none opacity-40"
             )}
           >

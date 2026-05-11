@@ -77,6 +77,7 @@ import { useRasterStroke } from "./hooks/use-raster-stroke"
 import { useResize } from "./hooks/use-resize"
 import { useRotate } from "./hooks/use-rotate"
 import { usePenTool } from "./hooks/use-pen-tool"
+import { usePinchGesture } from "./hooks/use-pinch-gesture"
 import { useShapeDraw } from "./hooks/use-shape-draw"
 import { useWheelInteraction } from "./hooks/use-wheel-interaction"
 import { useZoomDrag } from "./hooks/use-zoom-drag"
@@ -172,6 +173,14 @@ export function Canvas() {
 
   const { pan, startPan } = usePanDrag({ panX, panY, setPan })
   useWheelInteraction({ containerRef, zoom, panX, panY, setZoom, setPan })
+  const { gestureActiveRef } = usePinchGesture({
+    containerRef,
+    zoom,
+    panX,
+    panY,
+    setZoom,
+    setPan,
+  })
   const { drag, startLayerDrag } = useLayerDrag({
     layers,
     selectedIds,
@@ -408,10 +417,16 @@ export function Canvas() {
     <div
       ref={containerRef}
       className={cn(
-        "relative flex flex-1 items-center justify-center overflow-hidden bg-[color-mix(in_oklch,var(--color-muted),var(--color-background)_30%)]",
+        "relative flex flex-1 items-center justify-center overflow-hidden bg-[color-mix(in_oklch,var(--color-muted),var(--color-background)_30%)] touch-none",
         cursorClass
       )}
-      onPointerDown={onContainerPointerDown}
+      onPointerDown={(e) => {
+        // Swallow pointer-downs while a two-finger gesture is active —
+        // otherwise pointer 2 would start a new tool action on top of the
+        // pinch (e.g. another raster stroke).
+        if (gestureActiveRef.current) return
+        onContainerPointerDown(e)
+      }}
       onPointerMove={onPointerMoveCanvas}
       onPointerLeave={() => setCursor(null)}
       onDoubleClick={() => {

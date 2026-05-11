@@ -55,25 +55,44 @@ const BOTTOM: Tool[] = [
   { id: "zoom", label: "Zoom", shortcut: "Z", icon: ViewIcon },
 ]
 
-export function ToolPalette() {
+export function ToolPalette({
+  orientation = "vertical",
+  className,
+}: {
+  orientation?: "vertical" | "horizontal"
+  className?: string
+}) {
   const { tool, setTool } = useEditor()
+  const horizontal = orientation === "horizontal"
 
   return (
-    <aside className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-2">
+    <aside
+      className={cn(
+        horizontal
+          ? "flex h-12 w-full shrink-0 flex-row items-center gap-1 overflow-x-auto border-t border-border bg-background px-2"
+          : "flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-2",
+        className
+      )}
+    >
       {TOP.map((t) => (
         <ToolButton
           key={t.id}
           tool={t}
           active={tool === t.id}
+          orientation={orientation}
           onSelect={setTool}
         />
       ))}
-      <Separator className="my-1 w-6" />
+      <Separator
+        orientation={horizontal ? "vertical" : "horizontal"}
+        className={horizontal ? "mx-1 h-6" : "my-1 w-6"}
+      />
       {BOTTOM.map((t) => (
         <ToolButton
           key={t.id}
           tool={t}
           active={tool === t.id}
+          orientation={orientation}
           onSelect={setTool}
         />
       ))}
@@ -84,31 +103,40 @@ export function ToolPalette() {
 function ToolButton({
   tool,
   active,
+  orientation,
   onSelect,
 }: {
   tool: Tool
   active: boolean
+  orientation: "vertical" | "horizontal"
   onSelect: (id: ToolId) => void
 }) {
+  const horizontal = orientation === "horizontal"
+  const button = (
+    <button
+      type="button"
+      onClick={() => onSelect(tool.id)}
+      aria-label={tool.label}
+      aria-pressed={active}
+      className={cn(
+        // Touch-friendlier on horizontal (phone) orientation; dense on vertical.
+        "inline-flex shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        horizontal ? "size-9" : "size-8",
+        active &&
+          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+      )}
+    >
+      <HugeiconsIcon icon={tool.icon} className="size-4" />
+    </button>
+  )
+
+  // On phone (horizontal), hover tooltips are dead weight and can stick on
+  // touch — render the button directly without a Tooltip wrapper.
+  if (horizontal) return button
+
   return (
     <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            onClick={() => onSelect(tool.id)}
-            aria-label={tool.label}
-            aria-pressed={active}
-            className={cn(
-              "inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-              active &&
-                "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-            )}
-          >
-            <HugeiconsIcon icon={tool.icon} className="size-4" />
-          </button>
-        }
-      />
+      <TooltipTrigger render={button} />
       <TooltipContent side="right">
         {tool.label}{" "}
         <span className="ml-1 text-muted-foreground">{tool.shortcut}</span>

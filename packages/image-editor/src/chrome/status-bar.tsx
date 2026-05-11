@@ -25,7 +25,7 @@ export function StatusBar() {
   const sel = layers.find((l) => l.id === selectedId)
   const activeTool = spacePressed ? "pan (hold)" : tool
   return (
-    <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-border bg-background px-3 text-[11px] text-muted-foreground">
+    <footer className="hidden h-7 shrink-0 items-center gap-3 border-t border-border bg-background px-3 text-[11px] text-muted-foreground sm:flex">
       <span className="capitalize">{activeTool}</span>
       <span className="text-foreground/30">·</span>
       <span>{layers.length} layers</span>
