@@ -15,7 +15,6 @@ import {
   PanelRightIcon,
   Redo02Icon,
   Settings02Icon,
-  Share05Icon,
   Undo02Icon,
 } from "@hugeicons/core-free-icons"
 
@@ -49,7 +48,6 @@ import {
   EXPORT_FORMATS,
   exportComposition,
   makeColorResolver,
-  exportToBlob,
   type ExportFormat,
 } from "../lib/export"
 import { SettingsDialog } from "../dialogs/settings-dialog"
@@ -88,15 +86,12 @@ export function TopBar() {
     pushRecent,
     setProp,
     getRasterCanvas,
-    bgRemovalProgress,
-    removeBackgroundFromLayer,
   } = useEditor()
   const [exporting, setExporting] = useState<ExportFormat | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showDocument, setShowDocument] = useState(false)
   const [showNewDoc, setShowNewDoc] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
-  const [shareStatus, setShareStatus] = useState<string | null>(null)
   const [menuSheetOpen, setMenuSheetOpen] = useState(false)
   const [panelsOpen, setPanelsOpen] = useState(false)
   const openInputRef = useRef<HTMLInputElement | null>(null)
@@ -126,84 +121,30 @@ export function TopBar() {
     [layers, name, docSettings.width, docSettings.height, getRasterCanvas]
   )
 
-  const handleCopyLink = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href)
-      setShareStatus("Link copied")
-    } catch {
-      setShareStatus("Copy failed")
-    }
-    setTimeout(() => setShareStatus(null), 1500)
-  }, [])
-
   const handleSaveHyperimg = useCallback(async () => {
-    try {
-      const blob = await saveHyperimg({ layers, doc: docSettings })
-      const filename = `${name || "Untitled"}.hyperimg`
-      downloadBlob(blob, filename)
-      pushRecent({
-        name: filename,
-        thumbnail: "",
-        savedAt: Date.now(),
-      })
-      setShareStatus("Saved")
-    } catch {
-      setShareStatus("Save failed")
-    }
-    setTimeout(() => setShareStatus(null), 1500)
+    const blob = await saveHyperimg({ layers, doc: docSettings })
+    const filename = `${name || "Untitled"}.hyperimg`
+    downloadBlob(blob, filename)
+    pushRecent({
+      name: filename,
+      thumbnail: "",
+      savedAt: Date.now(),
+    })
   }, [layers, docSettings, name, pushRecent])
 
   const handleOpenHyperimgFile = useCallback(
     async (file: File) => {
-      try {
-        const snap = await loadHyperimg(file)
-        const tabName = file.name.replace(/\.hyperimg$/i, "")
-        newTab({ name: tabName, layers: snap.layers, docSettings: snap.doc })
-        pushRecent({
-          name: file.name,
-          thumbnail: "",
-          savedAt: Date.now(),
-        })
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error("open .hyperimg failed", e)
-        setShareStatus("Open failed")
-        setTimeout(() => setShareStatus(null), 1500)
-      }
+      const snap = await loadHyperimg(file)
+      const tabName = file.name.replace(/\.hyperimg$/i, "")
+      newTab({ name: tabName, layers: snap.layers, docSettings: snap.doc })
+      pushRecent({
+        name: file.name,
+        thumbnail: "",
+        savedAt: Date.now(),
+      })
     },
     [newTab, pushRecent]
   )
-
-  const handleCopyImage = useCallback(async () => {
-    try {
-      const blob = await exportToBlob({
-        layers,
-        filename: name,
-        format: "png",
-        width: docSettings.width,
-        height: docSettings.height,
-        photoUrl: illustration.src,
-        resolveColor: makeColorResolver(),
-        getRasterCanvas,
-      })
-      // Cast to satisfy TS lib lacking ClipboardItem in some envs.
-      const Item = (
-        window as unknown as {
-          ClipboardItem?: new (data: Record<string, Blob>) => unknown
-        }
-      ).ClipboardItem
-      if (!Item) throw new Error("ClipboardItem unsupported")
-      await (
-        navigator.clipboard as unknown as {
-          write: (items: unknown[]) => Promise<void>
-        }
-      ).write([new Item({ "image/png": blob })])
-      setShareStatus("Image copied")
-    } catch {
-      setShareStatus("Copy failed")
-    }
-    setTimeout(() => setShareStatus(null), 1500)
-  }, [layers, name, docSettings.width, docSettings.height, getRasterCanvas])
 
   const sel = layers.find((l) => l.id === selectedId) ?? null
   const selIdx = sel ? layers.findIndex((l) => l.id === sel.id) : -1
@@ -422,17 +363,6 @@ export function TopBar() {
           side={vertical ? "right" : "bottom"}
           className="min-w-52"
         >
-          <DropdownMenuItem
-            onClick={() => sel && void removeBackgroundFromLayer(sel.id)}
-            disabled={
-              !sel ||
-              (sel.kind !== "image" && sel.kind !== "raster") ||
-              sel.locked ||
-              sel.id in bgRemovalProgress
-            }
-          >
-            Remove background…
-          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setShowDocument(true)}>
             Document settings…
           </DropdownMenuItem>
@@ -632,7 +562,7 @@ export function TopBar() {
                 alt="Hypersuite"
                 width={20}
                 height={20}
-                className="size-5 rounded-full mt-0.5 ml-0.5"
+                className="mt-0.5 ml-0.5 size-5 rounded-full"
               />
             </Link>
           }
@@ -757,9 +687,7 @@ export function TopBar() {
           <SheetContent
             side={tabletUp ? "right" : "bottom"}
             className={
-              tabletUp
-                ? "w-80 p-0 sm:max-w-sm"
-                : "h-[80svh] max-h-[640px] p-0"
+              tabletUp ? "w-80 p-0 sm:max-w-sm" : "h-[80svh] max-h-[640px] p-0"
             }
           >
             <SheetHeader className="border-b border-border">
@@ -812,37 +740,6 @@ export function TopBar() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button size="sm" aria-label="Share">
-                <HugeiconsIcon icon={Share05Icon} />
-                <span className="hidden sm:inline">
-                  {shareStatus ?? "Share"}
-                </span>
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="min-w-44">
-            <DropdownMenuItem onClick={handleCopyLink}>
-              Copy link
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleCopyImage}>
-              Copy as image
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => handleExport("png")}
-              disabled={exporting !== null}
-            >
-              Download PNG
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSaveHyperimg}>
-              Save .hyperimg
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
         <Tooltip>
           <TooltipTrigger
             render={

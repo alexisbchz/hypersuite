@@ -162,7 +162,9 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   const [projectId, setProjectId] = useState(initialProject.id)
   const [projectName, setProjectName] = useState(initialProject.name)
   const [sampleRate] = useState(initialProject.sampleRate)
-  const [bitDepth, setBitDepth] = useState<16 | 24 | 32>(initialProject.bitDepth)
+  const [bitDepth, setBitDepth] = useState<16 | 24 | 32>(
+    initialProject.bitDepth
+  )
 
   const [doc, setDoc] = useState<DocState>({
     tracks: initialProject.tracks,
@@ -210,9 +212,10 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   // ---- history primitives ----
   const apply = useCallback(
     (
-      updater: (
-        s: { tracks: Track[]; clips: Clip[] }
-      ) => { tracks: Track[]; clips: Clip[] }
+      updater: (s: { tracks: Track[]; clips: Clip[] }) => {
+        tracks: Track[]
+        clips: Clip[]
+      }
     ) => {
       setDoc((d) => {
         const next = updater({ tracks: d.tracks, clips: d.clips })
@@ -346,7 +349,9 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     (id: string, height: number) => {
       apply((s) => ({
         tracks: s.tracks.map((t) =>
-          t.id === id ? { ...t, height: Math.max(48, Math.min(320, height)) } : t
+          t.id === id
+            ? { ...t, height: Math.max(48, Math.min(320, height)) }
+            : t
         ),
         clips: s.clips,
       }))
@@ -448,7 +453,10 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
             const maxRight = buf
               ? buf.duration - c.offset - c.duration
               : Infinity
-            const dr = Math.max(-(c.duration - 0.05), Math.min(maxRight, deltaSec))
+            const dr = Math.max(
+              -(c.duration - 0.05),
+              Math.min(maxRight, deltaSec)
+            )
             return clampClipFade({
               ...c,
               duration: Math.max(0.05, c.duration + dr),
@@ -561,8 +569,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   const copy = useCallback(
     (ids?: string[]) => {
       const targetIds = (
-        ids ??
-        (selection?.kind === "clips" ? selection.clipIds : [])
+        ids ?? (selection?.kind === "clips" ? selection.clipIds : [])
       ).filter(Boolean)
       const set = new Set(targetIds)
       const entries: ClipboardEntry[] = []
@@ -610,9 +617,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
         if (set.has(id)) set.delete(id)
         else set.add(id)
         const arr = [...set]
-        return arr.length
-          ? { kind: "clips", clipIds: arr }
-          : null
+        return arr.length ? { kind: "clips", clipIds: arr } : null
       }
       return { kind: "clips", clipIds: [id] }
     })

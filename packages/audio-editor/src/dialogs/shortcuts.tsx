@@ -66,10 +66,7 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
 export function ShortcutsDialog() {
   const { shortcutsDialogOpen, setShortcutsDialogOpen } = useEditor()
   return (
-    <Dialog
-      open={shortcutsDialogOpen}
-      onOpenChange={setShortcutsDialogOpen}
-    >
+    <Dialog open={shortcutsDialogOpen} onOpenChange={setShortcutsDialogOpen}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Keyboard shortcuts</DialogTitle>
@@ -80,15 +77,12 @@ export function ShortcutsDialog() {
         <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
           {SECTIONS.map((section) => (
             <div key={section.title}>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <h3 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                 {section.title}
               </h3>
               <ul className="space-y-1">
                 {section.rows.map(([label, key]) => (
-                  <li
-                    key={label}
-                    className="flex items-center justify-between"
-                  >
+                  <li key={label} className="flex items-center justify-between">
                     <span>{label}</span>
                     <kbd className="rounded-sm border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">
                       {key}

@@ -40,11 +40,7 @@ import { useEditor } from "../editor"
 import { createStreamingPlayer } from "../tts/audio"
 import { playTTS } from "../tts/inference"
 import { fromSafetensors, type PocketTTS } from "../tts/pocket-tts"
-import {
-  PREDEFINED_VOICES,
-  TOKENIZER_URL,
-  WEIGHTS_URL,
-} from "../tts/voices"
+import { PREDEFINED_VOICES, TOKENIZER_URL, WEIGHTS_URL } from "../tts/voices"
 
 type DownloadProgress = {
   name: string

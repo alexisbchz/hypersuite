@@ -19,65 +19,63 @@ export default async function OpengraphImage() {
   const mode: "dark" | "light" = "dark"
 
   return new ImageResponse(
-    (
-      <div
-        tw={
-          "relative flex h-full w-full " +
-          (mode === "dark"
-            ? "bg-neutral-900 text-white"
-            : "bg-neutral-50 text-black")
-        }
-      >
-        <div tw="flex flex-col items-center p-20 justify-center text-center w-full">
+    <div
+      tw={
+        "relative flex h-full w-full " +
+        (mode === "dark"
+          ? "bg-neutral-900 text-white"
+          : "bg-neutral-50 text-black")
+      }
+    >
+      <div tw="flex flex-col items-center p-20 justify-center text-center w-full">
+        <div
+          tw={
+            "relative flex items-center border px-14 py-8 shadow-md " +
+            (mode === "dark"
+              ? "border-neutral-700 bg-neutral-800 shadow-black/60"
+              : "border-neutral-200 bg-white shadow-neutral-100")
+          }
+        >
           <div
             tw={
-              "relative flex items-center border px-14 py-8 shadow-md " +
-              (mode === "dark"
-                ? "border-neutral-700 bg-neutral-800 shadow-black/60"
-                : "border-neutral-200 bg-white shadow-neutral-100")
+              "absolute -inset-y-24 -left-px w-px " +
+              (mode === "dark" ? "bg-neutral-700" : "bg-neutral-200")
             }
-          >
-            <div
-              tw={
-                "absolute -inset-y-24 -left-px w-px " +
-                (mode === "dark" ? "bg-neutral-700" : "bg-neutral-200")
-              }
-            />
-            <div
-              tw={
-                "absolute -inset-y-24 -right-px w-px " +
-                (mode === "dark" ? "bg-neutral-700" : "bg-neutral-200")
-              }
-            />
-            <div
-              tw={
-                "absolute -inset-x-24 -top-px h-px " +
-                (mode === "dark" ? "bg-neutral-700" : "bg-neutral-200")
-              }
-            />
-            <div
-              tw={
-                "absolute -inset-x-24 -bottom-px h-px " +
-                (mode === "dark" ? "bg-neutral-700" : "bg-neutral-200")
-              }
-            />
+          />
+          <div
+            tw={
+              "absolute -inset-y-24 -right-px w-px " +
+              (mode === "dark" ? "bg-neutral-700" : "bg-neutral-200")
+            }
+          />
+          <div
+            tw={
+              "absolute -inset-x-24 -top-px h-px " +
+              (mode === "dark" ? "bg-neutral-700" : "bg-neutral-200")
+            }
+          />
+          <div
+            tw={
+              "absolute -inset-x-24 -bottom-px h-px " +
+              (mode === "dark" ? "bg-neutral-700" : "bg-neutral-200")
+            }
+          />
 
-            <div
-              tw="rounded-full"
-              style={{
-                width: 86,
-                height: 86,
-                background:
-                  "linear-gradient(135deg, #f3a3c2 0%, #c41e5a 50%, #841a3a 100%)",
-              }}
-            />
-            <span tw="ml-12 text-7xl font-medium tracking-tighter">
-              Hypersuite
-            </span>
-          </div>
+          <div
+            tw="rounded-full"
+            style={{
+              width: 86,
+              height: 86,
+              background:
+                "linear-gradient(135deg, #f3a3c2 0%, #c41e5a 50%, #841a3a 100%)",
+            }}
+          />
+          <span tw="ml-12 text-7xl font-medium tracking-tighter">
+            Hypersuite
+          </span>
         </div>
       </div>
-    ),
+    </div>,
     {
       ...size,
       fonts: [

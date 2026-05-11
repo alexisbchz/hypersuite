@@ -10,7 +10,9 @@ export function StatusBar() {
       <div className="flex items-center gap-3">
         <span>Tool: {tool}</span>
         <span>·</span>
-        <span>{clips.length} clip{clips.length === 1 ? "" : "s"}</span>
+        <span>
+          {clips.length} clip{clips.length === 1 ? "" : "s"}
+        </span>
         <span>·</span>
         <span>{Math.round(pxPerSec)} px/sec</span>
       </div>

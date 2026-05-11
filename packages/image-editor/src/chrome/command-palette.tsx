@@ -53,12 +53,6 @@ export function CommandPalette() {
     run(() => window.dispatchEvent(new CustomEvent(eventName)))
 
   const noSel = editor.selectedIds.length === 0
-  const sel = editor.layers.find((l) => l.id === editor.selectedId) ?? null
-  const bgEligible =
-    sel !== null &&
-    !sel.locked &&
-    (sel.kind === "image" || sel.kind === "raster") &&
-    !(sel.id in editor.bgRemovalProgress)
 
   return (
     <CommandDialog
@@ -162,20 +156,6 @@ export function CommandPalette() {
             <CommandItem onSelect={run(editor.resetView)}>
               Reset view
               <CommandShortcut>⌘0</CommandShortcut>
-            </CommandItem>
-          </CommandGroup>
-
-          <CommandSeparator />
-
-          <CommandGroup heading="Image">
-            <CommandItem
-              onSelect={run(() => {
-                if (sel && bgEligible)
-                  void editor.removeBackgroundFromLayer(sel.id)
-              })}
-              disabled={!bgEligible}
-            >
-              Remove background
             </CommandItem>
           </CommandGroup>
 

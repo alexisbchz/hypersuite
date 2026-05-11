@@ -50,7 +50,11 @@ export function ProjectPanel() {
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <Button variant="outline" size="sm" className="w-full justify-between">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-between"
+              >
                 {bitDepth}-bit
               </Button>
             }

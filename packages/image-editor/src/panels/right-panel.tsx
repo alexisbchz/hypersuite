@@ -28,7 +28,10 @@ export function RightPanelContent({
       </TabsList>
       <Separator className="mt-2" />
 
-      <TabsContent value="properties" className="min-h-0 flex-1 overflow-y-auto">
+      <TabsContent
+        value="properties"
+        className="min-h-0 flex-1 overflow-y-auto"
+      >
         <PropertiesPanel />
       </TabsContent>
       <TabsContent value="layers" className="min-h-0 flex-1 overflow-hidden">

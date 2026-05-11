@@ -11,9 +11,7 @@ export type ExportOptions = {
   buffers: Map<string, AudioBuffer>
 }
 
-export async function renderMixdown(
-  opts: ExportOptions
-): Promise<AudioBuffer> {
+export async function renderMixdown(opts: ExportOptions): Promise<AudioBuffer> {
   const totalDuration = opts.clips.reduce(
     (m, c) => Math.max(m, c.start + c.duration),
     0
@@ -82,9 +80,7 @@ export function audioBufferToWav(
         view.setInt16(offset, v, true)
         offset += 2
       } else if (bitDepth === 24) {
-        const v = Math.round(
-          sample < 0 ? sample * 0x800000 : sample * 0x7fffff
-        )
+        const v = Math.round(sample < 0 ? sample * 0x800000 : sample * 0x7fffff)
         view.setUint8(offset, v & 0xff)
         view.setUint8(offset + 1, (v >> 8) & 0xff)
         view.setUint8(offset + 2, (v >> 16) & 0xff)

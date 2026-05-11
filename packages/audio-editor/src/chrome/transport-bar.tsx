@@ -71,7 +71,9 @@ export function TransportBar() {
                 onClick={() => (playing ? pause() : void play())}
                 aria-label={playing ? "Pause" : "Play"}
               >
-                <HugeiconsIcon icon={playing ? PauseCircleIcon : PlayCircleIcon} />
+                <HugeiconsIcon
+                  icon={playing ? PauseCircleIcon : PlayCircleIcon}
+                />
               </Button>
             }
           />

@@ -62,7 +62,7 @@ export function TrackRow({ track }: { track: Track }) {
             className={
               "h-5 w-5 rounded-sm font-mono " +
               (track.muted
-                ? "bg-destructive text-destructive-foreground"
+                ? "text-destructive-foreground bg-destructive"
                 : "bg-background text-muted-foreground hover:bg-muted")
             }
             aria-label="Mute"
@@ -92,7 +92,10 @@ export function TrackRow({ track }: { track: Track }) {
 
       <div
         className="relative flex-1 overflow-hidden"
-        style={{ background: "color-mix(in oklch, var(--color-muted), var(--color-background) 60%)" }}
+        style={{
+          background:
+            "color-mix(in oklch, var(--color-muted), var(--color-background) 60%)",
+        }}
         data-track-id={track.id}
         onPointerDown={onLanePointerDown}
         onMouseMove={onLaneMouseMove}

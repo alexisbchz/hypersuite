@@ -13,6 +13,7 @@ import { ProductCard, type Product } from "@/components/product-card"
 import audioIllustration from "./audio/illustration.webp"
 import { GitHubIcon } from "./github-icon"
 import imageIllustration from "@workspace/image-editor/assets/illustration.webp"
+import uiIllustration from "@workspace/ui-editor/assets/illustration.webp"
 import { LogoMenu } from "./logo-menu"
 
 const GITHUB_URL = "https://github.com/alexisbchz/hypersuite"
@@ -29,6 +30,12 @@ const products: Product[] = [
     title: "Audio",
     description: "Generate and edit audio with AI.",
     illustration: audioIllustration,
+  },
+  {
+    href: "/ui",
+    title: "UI",
+    description: "Build UI components",
+    illustration: uiIllustration,
   },
 ]
 

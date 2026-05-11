@@ -121,4 +121,3 @@ export type ToolId =
   | "picker"
   | "wand"
   | "zoom"
-  | "refine"

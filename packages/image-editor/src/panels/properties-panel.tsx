@@ -13,7 +13,6 @@ import {
   DistributeVerticalCenterIcon,
   CursorMagicSelectionIcon,
   Layers01Icon,
-  LoadingIcon,
   MagicWand01Icon,
   PaintBucketIcon,
   PathfinderIntersectIcon,
@@ -21,7 +20,6 @@ import {
   PathfinderUniteIcon,
   Rotate01Icon,
   Settings02Icon,
-  SparklesIcon,
 } from "@hugeicons/core-free-icons"
 
 import { Button } from "@workspace/ui/components/button"
@@ -41,7 +39,6 @@ import {
 } from "@workspace/ui/components/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
 import type { WandMaskMode, WandSampleSize } from "../canvas/utils"
-import type { BgRemovalProgress } from "../lib/background-removal"
 import { ColorPicker } from "../pickers/color-picker"
 import { FontPicker } from "../pickers/font-picker"
 import { useEditor } from "../editor"
@@ -102,12 +99,6 @@ export function PropertiesPanel() {
     invertMask,
     extractMaskToLayer,
     setPixelMask,
-    bgRemovalProgress,
-    removeBackgroundFromLayer,
-    refineMode,
-    setRefineMode,
-    resetMask,
-    setTool,
   } = useEditor()
   const layer = layers.find((l) => l.id === selectedId) ?? null
 
@@ -119,8 +110,7 @@ export function PropertiesPanel() {
     tool === "brush" ||
     tool === "eraser" ||
     tool === "pen" ||
-    tool === "wand" ||
-    tool === "refine"
+    tool === "wand"
   ) {
     return (
       <div className="flex h-full flex-col">
@@ -301,24 +291,6 @@ export function PropertiesPanel() {
               </Button>
             </Section>
           </>
-        )}
-        {tool === "refine" && (
-          <RefineToolSection
-            mode={refineMode}
-            setMode={setRefineMode}
-            brushSize={brushSize}
-            setBrushSize={setBrushSize}
-            brushHardness={brushHardness}
-            setBrushHardness={setBrushHardness}
-            hasMask={
-              !!layers.find((l) => l.id === selectedIds[0])?.maskDataUrl
-            }
-            onReset={() => {
-              const id = selectedIds[0]
-              if (id) resetMask(id)
-            }}
-            onDone={() => setTool("move")}
-          />
         )}
       </div>
     )
@@ -793,14 +765,6 @@ export function PropertiesPanel() {
         </Section>
 
         {(layer.kind === "image" || layer.kind === "raster") && (
-          <BgRemoveSection
-            layerId={layer.id}
-            progress={bgRemovalProgress[layer.id]}
-            onRun={() => void removeBackgroundFromLayer(layer.id)}
-          />
-        )}
-
-        {(layer.kind === "image" || layer.kind === "raster") && (
           <Section title="Adjustments" icon={MagicWand01Icon}>
             {(
               [
@@ -1101,7 +1065,11 @@ function WandModeRow({
   value: WandMaskMode
   onChange: (m: WandMaskMode) => void
 }) {
-  const items: { id: WandMaskMode; label: string; icon: typeof Settings02Icon }[] = [
+  const items: {
+    id: WandMaskMode
+    label: string
+    icon: typeof Settings02Icon
+  }[] = [
     { id: "new", label: "New selection", icon: CursorMagicSelectionIcon },
     { id: "add", label: "Add to selection (Shift)", icon: PathfinderUniteIcon },
     {
@@ -1223,161 +1191,8 @@ function ToggleRow({
       >
         {label}
       </Label>
-      <Switch
-        id={id}
-        size="sm"
-        checked={checked}
-        onCheckedChange={onChange}
-      />
+      <Switch id={id} size="sm" checked={checked} onCheckedChange={onChange} />
     </div>
-  )
-}
-
-function RefineToolSection({
-  mode,
-  setMode,
-  brushSize,
-  setBrushSize,
-  brushHardness,
-  setBrushHardness,
-  hasMask,
-  onReset,
-  onDone,
-}: {
-  mode: "restore" | "erase"
-  setMode: (m: "restore" | "erase") => void
-  brushSize: number
-  setBrushSize: (v: number) => void
-  brushHardness: number
-  setBrushHardness: (v: number) => void
-  hasMask: boolean
-  onReset: () => void
-  onDone: () => void
-}) {
-  return (
-    <Section title="Refine mask" icon={SparklesIcon}>
-      {!hasMask ? (
-        <p className="text-[11px] text-muted-foreground">
-          Run AI Remove background on an image or raster layer first — the
-          Refine brush touches up that mask.
-        </p>
-      ) : (
-        <>
-          <Row label="Brush">
-            <div
-              data-slot="button-group"
-              className="flex w-full overflow-hidden rounded-md border border-border"
-            >
-              <button
-                type="button"
-                aria-pressed={mode === "restore"}
-                onClick={() => setMode("restore")}
-                className={cn(
-                  "inline-flex h-7 flex-1 items-center justify-center text-xs transition-colors hover:bg-muted",
-                  mode === "restore"
-                    ? "bg-primary text-primary-foreground hover:bg-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Restore
-              </button>
-              <button
-                type="button"
-                aria-pressed={mode === "erase"}
-                onClick={() => setMode("erase")}
-                className={cn(
-                  "inline-flex h-7 flex-1 items-center justify-center border-l border-border text-xs transition-colors hover:bg-muted",
-                  mode === "erase"
-                    ? "bg-primary text-primary-foreground hover:bg-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Erase
-              </button>
-            </div>
-          </Row>
-          <Row label="Size">
-            <Slider
-              min={1}
-              max={120}
-              value={[brushSize]}
-              onValueChange={(v) => {
-                if (Array.isArray(v) && typeof v[0] === "number")
-                  setBrushSize(v[0])
-              }}
-            />
-          </Row>
-          <Row label="Hardness">
-            <Slider
-              min={0}
-              max={1}
-              step={0.05}
-              value={[brushHardness]}
-              onValueChange={(v) => {
-                if (Array.isArray(v) && typeof v[0] === "number")
-                  setBrushHardness(v[0])
-              }}
-            />
-          </Row>
-          <p className="text-[11px] text-muted-foreground">
-            Hold{" "}
-            <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">
-              Alt
-            </kbd>{" "}
-            while painting to flip the brush.
-          </p>
-          <div className="grid grid-cols-2 gap-1.5">
-            <Button variant="outline" size="sm" onClick={onReset}>
-              Reset mask
-            </Button>
-            <Button variant="default" size="sm" onClick={onDone}>
-              Done
-            </Button>
-          </div>
-        </>
-      )}
-    </Section>
-  )
-}
-
-function BgRemoveSection({
-  layerId,
-  progress,
-  onRun,
-}: {
-  layerId: string
-  progress: BgRemovalProgress | undefined
-  onRun: () => void
-}) {
-  const busy = progress !== undefined
-  const label = busy
-    ? progress.phase === "downloading"
-      ? `Downloading model… ${progress.pct}%`
-      : progress.pct > 0
-        ? `Removing background… ${progress.pct}%`
-        : "Removing background…"
-    : "Remove background"
-  return (
-    <Section title="AI" icon={SparklesIcon}>
-      <Button
-        key={layerId}
-        variant="default"
-        size="sm"
-        disabled={busy}
-        onClick={onRun}
-        className="w-full justify-center"
-      >
-        <HugeiconsIcon
-          icon={busy ? LoadingIcon : SparklesIcon}
-          className={cn(busy && "animate-spin")}
-        />
-        {label}
-      </Button>
-      <p className="text-[11px] text-muted-foreground">
-        Runs locally in your browser. The model (~40 MB) downloads once on
-        first use, then is cached.
-      </p>
-    </Section>
   )
 }
 

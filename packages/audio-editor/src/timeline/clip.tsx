@@ -9,7 +9,10 @@ import { cn } from "@workspace/ui/lib/utils"
 type Props = {
   clip: ClipType
   track: Track
-  onPointerDown?: (e: React.PointerEvent, side: "body" | "left" | "right") => void
+  onPointerDown?: (
+    e: React.PointerEvent,
+    side: "body" | "left" | "right"
+  ) => void
 }
 
 export function Clip({ clip, track, onPointerDown }: Props) {
@@ -60,7 +63,7 @@ export function Clip({ clip, track, onPointerDown }: Props) {
     <div
       onPointerDown={(e) => onPointerDown?.(e, "body")}
       className={cn(
-        "absolute top-1 select-none rounded-md border shadow-sm",
+        "absolute top-1 rounded-md border shadow-sm select-none",
         isSelected
           ? "border-primary ring-1 ring-primary"
           : "border-border hover:border-foreground/40"

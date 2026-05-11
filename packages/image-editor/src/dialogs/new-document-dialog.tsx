@@ -60,8 +60,8 @@ export function NewDocumentDialog({
         <DialogHeader>
           <DialogTitle>New document</DialogTitle>
           <DialogDescription>
-            Pick a preset or enter custom dimensions. Opens in a new tab with
-            a transparent canvas.
+            Pick a preset or enter custom dimensions. Opens in a new tab with a
+            transparent canvas.
           </DialogDescription>
         </DialogHeader>
 

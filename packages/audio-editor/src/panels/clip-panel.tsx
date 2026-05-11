@@ -6,13 +6,7 @@ import { useEditor } from "../editor"
 import { formatTime } from "../lib/geometry"
 
 export function ClipPanel() {
-  const {
-    clips,
-    selection,
-    setClipGain,
-    setClipFade,
-    renameClip,
-  } = useEditor()
+  const { clips, selection, setClipGain, setClipFade, renameClip } = useEditor()
 
   const selectedIds =
     selection?.kind === "clips" ? new Set(selection.clipIds) : new Set<string>()
@@ -81,9 +75,7 @@ export function ClipPanel() {
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Fade in</span>
-          <span className="font-mono">
-            {c.fadeInSec.toFixed(2)} s
-          </span>
+          <span className="font-mono">{c.fadeInSec.toFixed(2)} s</span>
         </div>
         <Slider
           min={0}
@@ -103,9 +95,7 @@ export function ClipPanel() {
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Fade out</span>
-          <span className="font-mono">
-            {c.fadeOutSec.toFixed(2)} s
-          </span>
+          <span className="font-mono">{c.fadeOutSec.toFixed(2)} s</span>
         </div>
         <Slider
           min={0}

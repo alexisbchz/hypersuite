@@ -22,10 +22,10 @@ export function Ruler({ width }: { width: number }) {
     ctx.clearRect(0, 0, width, RULER_HEIGHT)
 
     const styles = getComputedStyle(canvas)
-    const fg = styles.getPropertyValue("--color-muted-foreground").trim() ||
-      "#888"
-    const fgStrong = styles.getPropertyValue("--color-foreground").trim() ||
-      "#fff"
+    const fg =
+      styles.getPropertyValue("--color-muted-foreground").trim() || "#888"
+    const fgStrong =
+      styles.getPropertyValue("--color-foreground").trim() || "#fff"
 
     // Choose tick spacing in seconds based on zoom
     const targetPx = 80

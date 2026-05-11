@@ -97,9 +97,12 @@ export function ExportDialog() {
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <Button variant="outline" size="sm" className="w-full justify-between">
-                    {bitDepth}-bit{" "}
-                    {bitDepth === 32 ? "(float)" : "(PCM)"}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-between"
+                  >
+                    {bitDepth}-bit {bitDepth === 32 ? "(float)" : "(PCM)"}
                   </Button>
                 }
               />

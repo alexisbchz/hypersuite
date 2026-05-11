@@ -72,7 +72,6 @@ import { useLayerDrag } from "./hooks/use-layer-drag"
 import { useMarqueeDrag } from "./hooks/use-marquee-drag"
 import { useMultiTransform } from "./hooks/use-multi-transform"
 import { usePanDrag } from "./hooks/use-pan-drag"
-import { useMaskStroke } from "./hooks/use-mask-stroke"
 import { useRasterStroke } from "./hooks/use-raster-stroke"
 import { useResize } from "./hooks/use-resize"
 import { useRotate } from "./hooks/use-rotate"
@@ -125,10 +124,6 @@ export function Canvas() {
     wandMode,
     pixelMask,
     setPixelMask,
-    bgRemovalProgress,
-    refineMode,
-    getMaskCanvas,
-    ensureMaskCanvas,
     docSettings,
     prefs,
     viewToggles,
@@ -233,15 +228,6 @@ export function Canvas() {
     patch,
     commitRaster,
   })
-  const { startMaskStroke } = useMaskStroke({
-    docRef,
-    scale,
-    brushSize,
-    brushHardness,
-    getMaskCanvas,
-    patch,
-    commit,
-  })
   const { zoomDrag, startZoomDrag } = useZoomDrag({
     containerRef,
     docRef,
@@ -287,12 +273,10 @@ export function Canvas() {
     wandSampleAllLayers,
     wandMode,
     pixelMask,
-    refineMode,
     penAnchors,
     startPan,
     startShapeDraw,
     startStroke,
-    startMaskStroke,
     startZoomDrag,
     startMarquee,
     setPenAnchors,
@@ -388,19 +372,6 @@ export function Canvas() {
     }
   }, [tool, pixelMask, setPixelMask])
 
-  // Pre-warm the mask canvas the moment Refine tool engages so the user's
-  // first stroke paints into a decoded buffer (decoding takes a frame or
-  // two for large images — without this the first stroke would no-op).
-  useEffect(() => {
-    if (tool !== "refine") return
-    const target =
-      selectedIds.length === 1
-        ? layers.find((l) => l.id === selectedIds[0])
-        : layers.find((l) => l.maskDataUrl && l.kind === "raster")
-    if (!target?.maskDataUrl) return
-    void ensureMaskCanvas(target.id)
-  }, [tool, selectedIds, layers, ensureMaskCanvas])
-
   const cursorClass = useMemo(() => {
     if (pan) return "cursor-grabbing select-none"
     if (panMode) return "cursor-grab"
@@ -412,12 +383,11 @@ export function Canvas() {
     return ""
   }, [pan, panMode, drag, tool])
 
-
   return (
     <div
       ref={containerRef}
       className={cn(
-        "relative flex flex-1 items-center justify-center overflow-hidden bg-[color-mix(in_oklch,var(--color-muted),var(--color-background)_30%)] touch-none",
+        "relative flex flex-1 touch-none items-center justify-center overflow-hidden bg-[color-mix(in_oklch,var(--color-muted),var(--color-background)_30%)]",
         cursorClass
       )}
       onPointerDown={(e) => {
@@ -898,21 +868,13 @@ export function Canvas() {
           })()}
         {zoomDrag && <ZoomRect drag={zoomDrag} scale={scale} />}
         {cursor &&
-          (tool === "brush" ||
-            tool === "pencil" ||
-            tool === "eraser" ||
-            tool === "refine") && (
+          (tool === "brush" || tool === "pencil" || tool === "eraser") && (
             <BrushCursor
               x={cursor.x}
               y={cursor.y}
               size={brushSize}
               scale={scale}
-              tone={
-                tool === "eraser" ||
-                (tool === "refine" && refineMode === "erase")
-                  ? "subtract"
-                  : "add"
-              }
+              tone={tool === "eraser" ? "subtract" : "add"}
             />
           )}
         {pixelMask && tool === "wand" && (
@@ -924,18 +886,6 @@ export function Canvas() {
             className="pointer-events-none absolute inset-0 size-full"
           />
         )}
-        {layers.map((l) => {
-          const p = bgRemovalProgress[l.id]
-          if (!p) return null
-          return (
-            <BgRemovalOverlay
-              key={`bg-${l.id}`}
-              layer={l}
-              progress={p}
-              scale={scale}
-            />
-          )
-        })}
       </DocSurface>
 
       {fileDragging && <DropOverlay />}
@@ -998,62 +948,5 @@ function BrushCursor({
         strokeWidth={inv}
       />
     </svg>
-  )
-}
-
-/** Spinner + status pill rendered over a layer while AI background
- *  removal is running. Sized to the layer's bounding rect; the spinner
- *  pill counter-scales so it stays legible at any zoom level. */
-function BgRemovalOverlay({
-  layer,
-  progress,
-  scale,
-}: {
-  layer: Layer
-  progress: { phase: "downloading" | "processing"; pct: number }
-  scale: number
-}) {
-  const inv = 1 / Math.max(scale, 0.001)
-  const label =
-    progress.phase === "downloading"
-      ? `Downloading model… ${progress.pct}%`
-      : progress.pct > 0
-        ? `Removing background… ${progress.pct}%`
-        : "Removing background…"
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute flex items-center justify-center bg-background/60 backdrop-blur-[2px]"
-      style={{
-        left: layer.x,
-        top: layer.y,
-        width: layer.width,
-        height: layer.height,
-        transform: `rotate(${layer.rotation}deg)`,
-      }}
-    >
-      <div
-        className="flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground shadow-lg"
-        style={{ transform: `scale(${inv})`, transformOrigin: "center" }}
-      >
-        <svg
-          className="size-3.5 animate-spin text-primary"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <circle
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeDasharray="60 100"
-            opacity="0.8"
-          />
-        </svg>
-        {label}
-      </div>
-    </div>
   )
 }

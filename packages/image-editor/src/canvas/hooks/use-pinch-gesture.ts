@@ -38,14 +38,12 @@ export function usePinchGesture(opts: {
     if (!el) return
 
     const pointers = new Map<number, { x: number; y: number }>()
-    let gesture:
-      | {
-          startDist: number
-          startCenter: { x: number; y: number }
-          startZoom: number
-          startPan: { x: number; y: number }
-        }
-      | null = null
+    let gesture: {
+      startDist: number
+      startCenter: { x: number; y: number }
+      startZoom: number
+      startPan: { x: number; y: number }
+    } | null = null
     // Guard so the synthetic pointercancel we fire to clean up other hooks
     // doesn't tear down our own pointer map mid-gesture.
     let suppressSelfCancel = false
@@ -123,10 +121,7 @@ export function usePinchGesture(opts: {
       if (gesture.startDist <= 0) return
 
       const factor = curDist / gesture.startDist
-      const nextZoom = Math.min(
-        800,
-        Math.max(5, gesture.startZoom * factor)
-      )
+      const nextZoom = Math.min(800, Math.max(5, gesture.startZoom * factor))
       const ratio = nextZoom / gesture.startZoom
       const newPanX =
         curCenter.x - (gesture.startCenter.x - gesture.startPan.x) * ratio
