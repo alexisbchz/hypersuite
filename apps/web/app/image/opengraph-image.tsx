@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og"
 
-export const alt = "Hypersuite Image — Edit images right in your browser"
+export const alt = "Hypercreate Image — Edit images right in your browser"
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
 
@@ -59,7 +59,7 @@ export default function ImageOpengraph() {
             letterSpacing: -0.5,
           }}
         >
-          Hypersuite
+          Hypercreate
         </span>
       </div>
       <span

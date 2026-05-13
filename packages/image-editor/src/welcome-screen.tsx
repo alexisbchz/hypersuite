@@ -43,7 +43,7 @@ export function WelcomeScreen() {
               <HugeiconsIcon icon={Image01Icon} className="size-6" />
             </div>
             <h2 className="mt-4 text-lg font-semibold tracking-tight">
-              Hypersuite Image
+              Hypercreate Image
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Start a new project or open a file to get started

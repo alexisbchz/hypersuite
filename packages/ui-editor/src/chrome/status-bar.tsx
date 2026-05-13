@@ -31,7 +31,7 @@ export function StatusBar() {
       <div className="ms-auto flex items-center gap-2 font-mono text-foreground/40">
         <span>{Math.round(zoom)}%</span>
         <span>·</span>
-        <span>Hypersuite UI · prototype</span>
+        <span>Hypercreate UI · prototype</span>
       </div>
     </footer>
   )

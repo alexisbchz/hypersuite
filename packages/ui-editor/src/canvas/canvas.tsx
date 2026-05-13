@@ -107,6 +107,11 @@ export function Canvas() {
   // Global pointer-move/up so drags survive leaving the canvas surface.
   useEffect(() => {
     if (!drag) return
+    // Track whether the user actually moved during this drag. We only
+    // record an undo entry if they did — a bare click on an unselected
+    // frame shouldn't push a no-op snapshot onto the undo stack.
+    let moved = false
+    const SLOP_PX = 2
     const onMove = (e: PointerEvent) => {
       if (drag.kind === "pan") {
         setPan(
@@ -115,8 +120,14 @@ export function Canvas() {
         )
         return
       }
-      const dx = (e.clientX - drag.startPointer.x) / scale
-      const dy = (e.clientY - drag.startPointer.y) / scale
+      const dxRaw = e.clientX - drag.startPointer.x
+      const dyRaw = e.clientY - drag.startPointer.y
+      if (!moved && Math.abs(dxRaw) < SLOP_PX && Math.abs(dyRaw) < SLOP_PX) {
+        return
+      }
+      moved = true
+      const dx = dxRaw / scale
+      const dy = dyRaw / scale
       if (drag.kind === "move") {
         for (const id of drag.ids) {
           const start = drag.startPositions.get(id)
@@ -154,7 +165,7 @@ export function Canvas() {
       }
     }
     const onUp = () => {
-      if (drag.kind !== "pan") commit()
+      if (drag.kind !== "pan" && moved) commit()
       setDrag(null)
     }
     window.addEventListener("pointermove", onMove)
@@ -288,7 +299,7 @@ export function Canvas() {
     <div
       ref={surfaceRef}
       className={cn(
-        "relative min-h-0 flex-1 overflow-hidden bg-muted/30",
+        "relative h-full min-h-0 w-full flex-1 overflow-hidden bg-muted/30",
         "select-none"
       )}
       style={{ cursor: surfaceCursor }}
@@ -381,7 +392,6 @@ function FrameView({
         }}
       >
         {frame.kind === "image" ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={frame.src}
             alt={frame.name}
@@ -407,13 +417,16 @@ function FrameView({
 }
 
 function CanvasGrid() {
+  // Mirrors the image-editor `CheckerBackground` — same opacity recipe so
+  // the two editors feel like siblings rather than one being washed out.
   return (
     <div
-      className="pointer-events-none absolute inset-0 opacity-50"
+      aria-hidden
+      className="pointer-events-none absolute inset-0"
       style={{
         backgroundImage:
-          "radial-gradient(circle, color-mix(in oklab, var(--color-foreground) 12%, transparent) 1px, transparent 1px)",
-        backgroundSize: "24px 24px",
+          "radial-gradient(circle, color-mix(in oklch, var(--color-foreground), transparent 88%) 1px, transparent 1px)",
+        backgroundSize: "16px 16px",
       }}
     />
   )
@@ -425,7 +438,7 @@ function EmptyState() {
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
       <div className="pointer-events-auto flex max-w-md flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-background/80 p-8 text-center backdrop-blur">
         <h2 className="text-base font-semibold text-foreground">
-          Hypersuite UI
+          Hypercreate UI
         </h2>
         <p className="text-sm text-muted-foreground">
           Drop a screenshot to use as a reference, or add a playground frame to

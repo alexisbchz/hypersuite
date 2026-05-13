@@ -1,4 +1,4 @@
-# Hypersuite
+# Hypercreate
 
 > An open source creativity suite.
 

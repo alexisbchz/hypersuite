@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og"
 
-export const alt = "Hypersuite UI — A Figma-like Tailwind playground"
+export const alt = "Hypercreate UI — A Figma-like Tailwind playground"
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
 
@@ -59,7 +59,7 @@ export default function UiOpengraph() {
             letterSpacing: -0.5,
           }}
         >
-          Hypersuite
+          Hypercreate
         </span>
       </div>
       <span

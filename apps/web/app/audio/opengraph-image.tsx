@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og"
 
-export const alt = "Hypersuite Audio — Generate and edit audio with AI"
+export const alt = "Hypercreate Audio — Generate and edit audio with AI"
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
 
@@ -59,7 +59,7 @@ export default function AudioOpengraph() {
             letterSpacing: -0.5,
           }}
         >
-          Hypersuite
+          Hypercreate
         </span>
       </div>
       <span

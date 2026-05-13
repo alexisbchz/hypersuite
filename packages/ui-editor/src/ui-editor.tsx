@@ -18,7 +18,7 @@ import { KeyboardShortcuts } from "./keyboard-shortcuts"
 import { CodePanel } from "./panels/code-panel"
 import { RightPanel } from "./panels/right-panel"
 
-/** Top-level Hypersuite UI editor — Figma-like infinite canvas with two
+/** Top-level Hypercreate UI editor — Figma-like infinite canvas with two
  *  kinds of frames (reference images + live Tailwind playgrounds) and a
  *  bottom-docked Monaco code editor for editing the selected playground.
  *
@@ -36,13 +36,13 @@ export function UiEditor() {
         <TopBar onToggleShortcuts={() => setShortcutsOpen(true)} />
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <ToolPalette className="hidden md:flex" />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <ResizablePanelGroup direction="vertical">
-              <ResizablePanel defaultSize={62} minSize={20}>
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            <ResizablePanelGroup orientation="vertical">
+              <ResizablePanel defaultSize={70} minSize={20}>
                 <Canvas />
               </ResizablePanel>
               <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={38} minSize={15}>
+              <ResizablePanel defaultSize={30} minSize={15}>
                 <CodePanel />
               </ResizablePanel>
             </ResizablePanelGroup>

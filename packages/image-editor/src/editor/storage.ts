@@ -8,9 +8,9 @@ import {
   type ViewToggles,
 } from "./doc"
 
-const STORAGE_KEY = "hypersuite.image.doc.v2"
-const PREFS_KEY = "hypersuite.image.prefs.v1"
-const RECENTS_KEY = "hypersuite.image.recents.v1"
+const STORAGE_KEY = "hypercreate.image.doc.v2"
+const PREFS_KEY = "hypercreate.image.prefs.v1"
+const RECENTS_KEY = "hypercreate.image.recents.v1"
 
 export const RECENTS_LIMIT = 5
 export const AUTOSAVE_DELAY_MS = 400

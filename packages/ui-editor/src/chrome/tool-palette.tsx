@@ -82,25 +82,13 @@ export function ToolPalette({
           onSelect={setTool}
         />
       ))}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Add reference image"
-              className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-            >
-              <HugeiconsIcon icon={Image01Icon} className="size-4" />
-            </button>
-          }
-        />
-        <TooltipContent side={horizontal ? "top" : "right"}>
-          Add reference image · I
-        </TooltipContent>
-      </Tooltip>
+      <ActionButton
+        label="Add reference image"
+        shortcut="I"
+        icon={Image01Icon}
+        orientation={orientation}
+        onClick={() => fileInputRef.current?.click()}
+      />
 
       <input
         ref={fileInputRef}
@@ -130,27 +118,72 @@ function ToolButton({
   onSelect: (id: ToolId) => void
 }) {
   const horizontal = orientation === "horizontal"
+  const button = (
+    <button
+      type="button"
+      onClick={() => onSelect(tool.id)}
+      aria-label={tool.label}
+      aria-pressed={active}
+      className={cn(
+        // Touch-friendlier on horizontal (phone) orientation; dense on vertical.
+        "inline-flex shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        horizontal ? "size-9" : "size-8",
+        active &&
+          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+      )}
+    >
+      <HugeiconsIcon icon={tool.icon} className="size-4" />
+    </button>
+  )
+
+  // On phone (horizontal), hover tooltips are dead weight and can stick on
+  // touch — render the button directly without a Tooltip wrapper.
+  if (horizontal) return button
+
   return (
     <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            aria-pressed={active}
-            onClick={() => onSelect(tool.id)}
-            className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-md transition-colors",
-              active
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <HugeiconsIcon icon={tool.icon} className="size-4" />
-          </button>
-        }
-      />
-      <TooltipContent side={horizontal ? "top" : "right"}>
-        {tool.label} · {tool.shortcut}
+      <TooltipTrigger render={button} />
+      <TooltipContent side="right">
+        {tool.label}{" "}
+        <span className="ml-1 text-muted-foreground">{tool.shortcut}</span>
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+function ActionButton({
+  label,
+  shortcut,
+  icon,
+  orientation,
+  onClick,
+}: {
+  label: string
+  shortcut: string
+  icon: typeof Cursor02Icon
+  orientation: "vertical" | "horizontal"
+  onClick: () => void
+}) {
+  const horizontal = orientation === "horizontal"
+  const button = (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        horizontal ? "size-9" : "size-8"
+      )}
+    >
+      <HugeiconsIcon icon={icon} className="size-4" />
+    </button>
+  )
+  if (horizontal) return button
+  return (
+    <Tooltip>
+      <TooltipTrigger render={button} />
+      <TooltipContent side="right">
+        {label} <span className="ml-1 text-muted-foreground">{shortcut}</span>
       </TooltipContent>
     </Tooltip>
   )

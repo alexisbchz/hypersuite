@@ -16,7 +16,7 @@ import imageIllustration from "@workspace/image-editor/assets/illustration.webp"
 import uiIllustration from "@workspace/ui-editor/assets/illustration.webp"
 import { LogoMenu } from "./logo-menu"
 
-const GITHUB_URL = "https://github.com/alexisbchz/hypersuite"
+const GITHUB_URL = "https://github.com/alexisbchz/hypercreate"
 
 const products: Product[] = [
   {
@@ -52,7 +52,7 @@ export default function Page() {
         </Breadcrumb>
         <div>
           <LogoMenu />
-          <h1 className="text-lg font-semibold">Hypersuite</h1>
+          <h1 className="text-lg font-semibold">Hypercreate</h1>
           <p className="text-lg text-muted-foreground">
             An open source creativity suite.
           </p>
@@ -72,7 +72,7 @@ export default function Page() {
           </a>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-6 sm:gap-12">
+        <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-12">
           {products.map((product) => (
             <ProductCard key={product.href} product={product} />
           ))}

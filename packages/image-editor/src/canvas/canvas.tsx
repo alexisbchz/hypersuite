@@ -622,7 +622,7 @@ export function Canvas() {
 
             if (l.kind === "text") {
               const content =
-                l.text ?? (l.id === "title" ? "Hypersuite" : l.name)
+                l.text ?? (l.id === "title" ? "Hypercreate" : l.name)
               const isEditingText = editingTextId === l.id
               return (
                 <div

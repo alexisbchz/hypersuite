@@ -54,7 +54,7 @@ export function LogoMenu() {
   const handleDownload = () => {
     const a = document.createElement("a")
     a.href = "/logo.svg"
-    a.download = "hypersuite-logo.svg"
+    a.download = "hypercreate-logo.svg"
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -67,7 +67,7 @@ export function LogoMenu() {
           <span className="mb-3 inline-block">
             <Image
               src="/logo.svg"
-              alt="Hypersuite logo"
+              alt="Hypercreate logo"
               width={40}
               height={40}
               priority

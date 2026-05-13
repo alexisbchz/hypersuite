@@ -4,7 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Image01Icon,
   LinkSquare02Icon,
-  LockKeyholeIcon,
+  LockKeyIcon,
 } from "@hugeicons/core-free-icons"
 
 import { ScrollArea } from "@workspace/ui/components/scroll-area"
@@ -56,7 +56,7 @@ export function FramesPanel() {
                 <span className="flex-1 truncate">{f.name}</span>
                 {f.locked && (
                   <HugeiconsIcon
-                    icon={LockKeyholeIcon}
+                    icon={LockKeyIcon}
                     className="size-3 text-muted-foreground"
                   />
                 )}

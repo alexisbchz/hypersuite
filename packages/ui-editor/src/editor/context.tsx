@@ -10,6 +10,7 @@ import {
   useState,
 } from "react"
 
+import { buildStarterScene } from "../lib/starter-playgrounds"
 import type { Frame, ImageFrame, PlaygroundFrame, ToolId } from "../lib/types"
 import {
   AUTOSAVE_DELAY_MS,
@@ -121,15 +122,19 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     if (hydratedRef.current) return
     hydratedRef.current = true
     const saved = loadPersistedDoc()
-    if (saved) {
+    if (saved && saved.frames.length > 0) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setDoc({ frames: saved.frames, past: [], future: [] })
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setZoomState(saved.zoom)
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPanX(saved.panX)
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPanY(saved.panY)
+    } else {
+      // First visit (or a previously-cleared canvas): pre-seed with the
+      // starter playgrounds so the editor lands populated and clickable
+      // rather than a blank page. Zoom set low enough that the whole
+      // starter grid fits in a typical viewport (~1280×600 canvas surface).
+      setDoc({ frames: buildStarterScene(), past: [], future: [] })
+      setZoomState(45)
     }
   }, [])
 
@@ -286,13 +291,20 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       )
       const width = Math.round(img.naturalWidth * ratio)
       const height = Math.round(img.naturalHeight * ratio)
+      // Default to the world point currently centered in the viewport so
+      // imported images appear right where the user is looking.
+      const scale = zoom / 100
+      const centerX = -panX / scale
+      const centerY = -panY / scale
+      const x = opts.x ?? centerX
+      const y = opts.y ?? centerY
       const id = `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
       const frame: ImageFrame = {
         id,
         kind: "image",
         name: file.name.replace(/\.[^.]+$/, "") || "Reference",
-        x: Math.round((opts.x ?? 0) - width / 2),
-        y: Math.round((opts.y ?? 0) - height / 2),
+        x: Math.round(x - width / 2),
+        y: Math.round(y - height / 2),
         width,
         height,
         locked: false,
@@ -303,7 +315,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       setSelectedIds([id])
       return id
     },
-    [apply]
+    [apply, panX, panY, zoom]
   )
 
   const addPlayground = useCallback(
@@ -311,12 +323,21 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       const id = `pg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
       const width = 640
       const height = 400
+      // Default spawn position is the world point currently centered in
+      // the visible canvas viewport — that's `-pan / scale`. Without this
+      // a new playground would always land at world (0, 0), often far
+      // off-screen if the user has panned to inspect a frame.
+      const scale = zoom / 100
+      const centerX = -panX / scale
+      const centerY = -panY / scale
+      const x = opts.x ?? centerX
+      const y = opts.y ?? centerY
       const frame: PlaygroundFrame = {
         id,
         kind: "playground",
         name: "Playground",
-        x: Math.round((opts.x ?? 0) - width / 2),
-        y: Math.round((opts.y ?? 0) - height / 2),
+        x: Math.round(x - width / 2),
+        y: Math.round(y - height / 2),
         width,
         height,
         locked: false,
@@ -327,7 +348,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       setSelectedIds([id])
       return id
     },
-    [apply]
+    [apply, panX, panY, zoom]
   )
 
   const duplicate = useCallback(
@@ -390,8 +411,11 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const resetDoc = useCallback(() => {
-    setDoc({ frames: [], past: [], future: [] })
+    setDoc({ frames: buildStarterScene(), past: [], future: [] })
     setSelectedIds([])
+    setZoomState(45)
+    setPanX(0)
+    setPanY(0)
     clearPersistedDoc()
   }, [])
 

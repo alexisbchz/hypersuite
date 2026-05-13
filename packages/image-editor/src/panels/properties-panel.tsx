@@ -441,7 +441,7 @@ export function PropertiesPanel() {
                 key={`txt-${layer.id}`}
                 defaultValue={
                   layer.text ??
-                  (layer.id === "title" ? "Hypersuite" : layer.name)
+                  (layer.id === "title" ? "Hypercreate" : layer.name)
                 }
                 onFocus={commit}
                 onChange={(e) =>

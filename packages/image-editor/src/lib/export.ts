@@ -170,7 +170,7 @@ async function renderRaster({
         // fall through if not available — skip
       }
     } else if (l.kind === "text") {
-      const content = l.text ?? (l.id === "title" ? "Hypersuite" : l.name)
+      const content = l.text ?? (l.id === "title" ? "Hypercreate" : l.name)
       const size = l.fontSize ?? 56
       const weight = l.fontWeight ?? 600
       ctx.fillStyle = resolveColor?.(l.color ?? "#000") ?? "#000"
@@ -312,7 +312,7 @@ async function renderSvg({
     } else if (l.kind === "text") {
       const color = escapeXml(resolveColor?.(l.color ?? "#000") ?? "#000")
       const content = escapeXml(
-        l.text ?? (l.id === "title" ? "Hypersuite" : l.name)
+        l.text ?? (l.id === "title" ? "Hypercreate" : l.name)
       )
       const size = l.fontSize ?? 56
       const weight = l.fontWeight ?? 600

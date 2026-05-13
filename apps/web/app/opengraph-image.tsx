@@ -1,11 +1,11 @@
 import { ImageResponse } from "next/og"
 
-export const alt = "Hypersuite — an open source creativity suite"
+export const alt = "Hypercreate — an open source creativity suite"
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
 
 // og-25 framed-logo design from shadcnui-blocks.com/r/base/og-25, adapted
-// for Hypersuite. Geist Medium fetched at the edge so we don't ship a font
+// for Hypercreate. Geist Medium fetched at the edge so we don't ship a font
 // asset.
 async function loadFont() {
   const res = await fetch(
@@ -71,7 +71,7 @@ export default async function OpengraphImage() {
             }}
           />
           <span tw="ml-12 text-7xl font-medium tracking-tighter">
-            Hypersuite
+            Hypercreate
           </span>
         </div>
       </div>

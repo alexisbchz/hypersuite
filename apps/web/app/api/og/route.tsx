@@ -4,7 +4,7 @@ export const runtime = "edge"
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
-  const title = url.searchParams.get("title") ?? "Hypersuite"
+  const title = url.searchParams.get("title") ?? "Hypercreate"
   const subtitle =
     url.searchParams.get("subtitle") ?? "An open source creativity suite."
   const palette = url.searchParams.get("palette") ?? "pink"

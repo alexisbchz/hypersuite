@@ -17,15 +17,15 @@ import {
 import { useEditor } from "../editor"
 
 export const CMD_EVENTS = {
-  newDocument: "hypersuite:cmd:new-document",
-  openFile: "hypersuite:cmd:open-file",
-  save: "hypersuite:cmd:save",
-  exportPng: "hypersuite:cmd:export-png",
-  exportJpeg: "hypersuite:cmd:export-jpeg",
-  exportWebp: "hypersuite:cmd:export-webp",
-  exportSvg: "hypersuite:cmd:export-svg",
-  documentSettings: "hypersuite:cmd:document-settings",
-  shortcuts: "hypersuite:cmd:shortcuts",
+  newDocument: "hypercreate:cmd:new-document",
+  openFile: "hypercreate:cmd:open-file",
+  save: "hypercreate:cmd:save",
+  exportPng: "hypercreate:cmd:export-png",
+  exportJpeg: "hypercreate:cmd:export-jpeg",
+  exportWebp: "hypercreate:cmd:export-webp",
+  exportSvg: "hypercreate:cmd:export-svg",
+  documentSettings: "hypercreate:cmd:document-settings",
+  shortcuts: "hypercreate:cmd:shortcuts",
 } as const
 
 export function CommandPalette() {

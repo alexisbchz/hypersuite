@@ -1,6 +1,9 @@
 import type { Frame } from "../lib/types"
 
-const STORAGE_KEY = "hypersuite.ui-editor.doc.v1"
+// Bumped after seeding the starter scene was introduced — older saved
+// docs predate the seed scene and are silently dropped so first-paint
+// always shows a populated canvas.
+const STORAGE_KEY = "hypercreate.ui-editor.doc.v2"
 export const AUTOSAVE_DELAY_MS = 600
 
 type Persisted = {

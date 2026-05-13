@@ -3,10 +3,10 @@ import type { Project } from "../lib/types"
 
 export const AUTOSAVE_DELAY_MS = 400
 
-const PROJECT_KEY = "hypersuite.audio.project.v1"
-const PREFS_KEY = "hypersuite.audio.prefs.v1"
+const PROJECT_KEY = "hypercreate.audio.project.v1"
+const PREFS_KEY = "hypercreate.audio.prefs.v1"
 
-const DB_NAME = "hypersuite-audio"
+const DB_NAME = "hypercreate-audio"
 const DB_VERSION = 1
 const BLOBS_STORE = "blobs"
 

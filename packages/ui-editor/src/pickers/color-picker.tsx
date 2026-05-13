@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+
 import {
   Popover,
   PopoverContent,
@@ -9,26 +10,38 @@ import {
 import { Input } from "@workspace/ui/components/input"
 import { cn } from "@workspace/ui/lib/utils"
 
+// Tailwind 500-shade palette — these are the colors people reach for
+// 95% of the time when reproducing a screenshot, so they earn the top
+// row. Neutrals on top so the layout reads "darker → brighter" left to
+// right within each row.
 const PALETTE = [
-  "#000000",
-  "#1f1f1f",
-  "#3a3a3a",
-  "#7a7a7a",
-  "#bcbcbc",
   "#ffffff",
+  "#f8fafc",
+  "#e2e8f0",
+  "#94a3b8",
+  "#475569",
+  "#0f172a",
+  "#000000",
   "#ef4444",
+  "#f97316",
   "#f59e0b",
-  "#facc15",
+  "#eab308",
+  "#84cc16",
   "#22c55e",
+  "#10b981",
+  "#14b8a6",
   "#06b6d4",
+  "#0ea5e9",
   "#3b82f6",
   "#6366f1",
+  "#8b5cf6",
   "#a855f7",
+  "#d946ef",
   "#ec4899",
   "#f43f5e",
 ]
 
-const RECENTS_KEY = "hypercreate.image.recents.v1.colors"
+const RECENTS_KEY = "hypercreate.ui-editor.recents.colors.v1"
 const RECENTS_LIMIT = 12
 
 function loadRecentColors(): string[] {
@@ -55,25 +68,35 @@ function saveRecentColor(c: string) {
   }
 }
 
+/** Popover color picker — swatch + palette + recent colors + hex input
+ *  + native picker + (optional) eyedropper. Same pattern as the image
+ *  editor's `ColorPicker` for consistency across products. */
 export function ColorPicker({
   value,
   onChange,
-  onFocus,
+  onCommit,
 }: {
   value: string
+  /** Fires as the value changes (every palette click, every keystroke
+   *  in the hex input, every native picker step). Use this to keep the
+   *  preview in sync. */
   onChange: (v: string) => void
-  onFocus?: () => void
+  /** Fires when the change is "done" (swatch selected, blur, native
+   *  picker closed). Use this to push to undo history. */
+  onCommit?: (v: string) => void
 }) {
   const [recents, setRecents] = useState<string[]>([])
   const [draft, setDraft] = useState(value)
 
-  useEffect(() => {
-    setRecents(loadRecentColors())
-  }, [])
+  // Sync draft when the parent's value changes (e.g. undo, frame swap).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setDraft(value), [value])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setRecents(loadRecentColors()), [])
 
   const commit = (c: string) => {
     onChange(c)
+    onCommit?.(c)
     saveRecentColor(c)
     setRecents(loadRecentColors())
   }
@@ -88,13 +111,12 @@ export function ColorPicker({
             <button
               type="button"
               aria-label="Pick color"
-              onFocus={onFocus}
               className="inline-block size-4 rounded ring-1 ring-border hover:ring-ring"
               style={{ background: value }}
             />
           }
         />
-        <PopoverContent align="start" sideOffset={6} className="w-52">
+        <PopoverContent align="start" sideOffset={6} className="w-56">
           <div className="grid gap-2.5">
             <div className="grid grid-cols-8 gap-1">
               {PALETTE.map((c) => (
@@ -138,7 +160,8 @@ export function ColorPicker({
                 <input
                   type="color"
                   value={value}
-                  onChange={(e) => commit(e.target.value)}
+                  onChange={(e) => onChange(e.target.value)}
+                  onBlur={(e) => onCommit?.(e.target.value)}
                   className="size-7 cursor-pointer rounded border border-border bg-transparent p-0"
                 />
               )}
@@ -146,8 +169,16 @@ export function ColorPicker({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onBlur={() => commit(draft)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    ;(e.target as HTMLInputElement).blur()
+                  }
+                }}
                 className="h-7 flex-1 font-mono text-xs"
               />
+              {/* EyeDropper API is Chromium-only — but when it's there,
+                  it's the fastest way to grab a color off the reference
+                  screenshot the user just dropped onto the canvas. */}
               <button
                 type="button"
                 onClick={async () => {
@@ -168,6 +199,7 @@ export function ColorPicker({
                   }
                 }}
                 title="Eyedropper"
+                aria-label="Eyedropper"
                 className="size-7 rounded border border-border bg-background text-xs hover:bg-muted"
               >
                 ⌖
@@ -178,8 +210,8 @@ export function ColorPicker({
       </Popover>
       <Input
         value={value}
-        onFocus={onFocus}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => onCommit?.(e.target.value)}
         className="h-7 border-0 bg-transparent px-0 font-mono text-xs focus-visible:ring-0"
       />
     </div>

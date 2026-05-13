@@ -77,7 +77,7 @@ export function StatusBar() {
           </button>
         ))}
         <span className="ms-2 font-mono text-foreground/40">
-          Hypersuite Image · prototype
+          Hypercreate Image · prototype
         </span>
       </div>
     </footer>

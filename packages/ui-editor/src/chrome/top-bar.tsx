@@ -66,7 +66,7 @@ export function TopBar({
             >
               <Image
                 src="/logo.svg"
-                alt="Hypersuite"
+                alt="Hypercreate"
                 width={20}
                 height={20}
                 className="mt-0.5 ml-0.5 size-5 rounded-full"
@@ -291,7 +291,7 @@ export function TopBar({
             <DropdownMenuItem
               render={
                 <a
-                  href="https://github.com/alexisbchz/hypersuite"
+                  href="https://github.com/alexisbchz/hypercreate"
                   target="_blank"
                   rel="noreferrer"
                 />
